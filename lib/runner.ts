@@ -9,6 +9,7 @@ import { EventEmitter } from "node:events";
 import { getFeed, type FeedHandle } from "./feed";
 import { decide, markPosition, type Agent, type Position } from "./agent";
 import { getPaper, type AgentLevers } from "./papers";
+import { getProof } from "./proof";
 import type { Edge } from "./edge/types";
 
 const START_BANKROLL = 350; // universal — every agent starts equal
@@ -176,6 +177,7 @@ class AgentRunner extends EventEmitter {
     return {
       mode: this.feed.mode,
       status: this.feed.status,
+      proof: getProof(),
       agents: [...this.agents.values()].map((a) => ({
         ...a,
         openPositions: a.positions.filter((p) => p.status === "open").length,

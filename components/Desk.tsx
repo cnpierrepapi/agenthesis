@@ -27,9 +27,17 @@ interface AgentView {
   unrealized: number;
 }
 
+interface Proof {
+  signedOnSolana: boolean;
+  cluster: string;
+  signupTx: string | null;
+  explorerUrl: string | null;
+}
+
 interface Snapshot {
   mode: string;
   status: string;
+  proof?: Proof;
   agents: AgentView[];
 }
 
@@ -111,6 +119,28 @@ export default function Desk() {
             {snap?.mode ?? "…"}
           </span>
         </div>
+      </div>
+
+      {/* provenance — the on-chain proof of access */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-faint">
+        <span className="label">data source</span>
+        <span className="text-muted">
+          {snap?.mode === "live" ? "TxLINE live feed" : "synth (deterministic demo)"}
+        </span>
+        {snap?.proof?.signedOnSolana && (
+          <>
+            <span className="text-ink-500">·</span>
+            <span className="amber">✓ access signed on Solana</span>
+            <a
+              href={snap.proof.explorerUrl ?? "#"}
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-ink-500 underline-offset-2 hover:text-fg"
+            >
+              tx {snap.proof.signupTx?.slice(0, 6)}…{snap.proof.signupTx?.slice(-4)} ({snap.proof.cluster})
+            </a>
+          </>
+        )}
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-12">
