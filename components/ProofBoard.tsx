@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import LiveFrames from "@/components/LiveFrames";
 
 interface Proof {
   signedOnSolana: boolean;
@@ -80,6 +81,9 @@ export default function ProofBoard() {
   const prov = snap?.provenance ?? [];
   const settled = trades.filter((t) => t.status === "settled");
   const netPnl = settled.reduce((s, t) => s + t.pnl, 0);
+  // The total real TxLINE data we have on hand (captured + bundled), as opposed
+  // to `totalIngested` which is the live running count this session.
+  const capturedFrames = prov.reduce((s, m) => s + m.oddsFrames + m.scoreFrames, 0);
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-8">
@@ -99,12 +103,38 @@ export default function ProofBoard() {
       </header>
 
       {/* headline evidence stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="data source" value={sourceLabel(snap?.mode)} small />
+        <Stat label="matches captured" value={prov.length.toLocaleString()} />
+        <Stat label="real frames pulled" value={capturedFrames.toLocaleString()} />
         <Stat label="frames ingested" value={(snap?.totalIngested ?? 0).toLocaleString()} />
         <Stat label="total trades" value={(snap?.tradeCount ?? 0).toLocaleString()} />
         <Stat label="net settled p&l" value={money(netPnl)} tone={netPnl >= 0 ? "gain" : "loss"} />
       </div>
+
+      {/* VERIFY-AGAINST-YOUR-DB — the CSV download */}
+      <section className="panel mt-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="max-w-2xl">
+          <p className="label mb-1">reconcile against your database</p>
+          <p className="text-sm text-muted">
+            Download every real TxLINE frame we ingested — original timestamp, market, and demargined prices — with the
+            agents&apos; execution tallied inline on the frames they traded. Join on{" "}
+            <code className="rounded border border-ink-600 bg-ink-800 px-1 text-xs text-fg">fixture_id</code> +{" "}
+            <code className="rounded border border-ink-600 bg-ink-800 px-1 text-xs text-fg">frame_ts_ms</code> to confirm
+            our prices match yours, and see exactly what each agent did on that frame.
+          </p>
+          <p className="mt-1 text-xs text-faint">
+            {capturedFrames.toLocaleString()} frames · {prov.length} matches · {(snap?.tradeCount ?? 0).toLocaleString()}{" "}
+            agent trades fingerprinted to their source frame.
+          </p>
+        </div>
+        <a
+          href="/api/verify-csv"
+          className="shrink-0 rounded border border-amber-dim bg-amber/10 px-4 py-2 text-center text-sm text-amber hover:bg-amber/20"
+        >
+          ↓ Download verification CSV
+        </a>
+      </section>
 
       {/* SOLANA PROOF OF ACCESS */}
       <section className="panel mt-6 p-5">
@@ -141,6 +171,9 @@ export default function ProofBoard() {
           <p className="text-sm text-faint">no on-chain proof configured.</p>
         )}
       </section>
+
+      {/* REAL-TIME — live frames polled by the deployed app */}
+      <LiveFrames />
 
       {/* INGESTION EVIDENCE — captured matches */}
       <section className="mt-6">

@@ -10,7 +10,10 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/agent_test.mjs"
+    "test": "node scripts/agent_test.mjs",
+    "check:live": "node --env-file=.env.local scripts/check_live.mjs",
+    "record": "node --env-file=.env.local scripts/record_odds.mjs",
+    "import:replays": "node scripts/import_replays.mjs"
   },
   "dependencies": {
     "next": "16.2.9",

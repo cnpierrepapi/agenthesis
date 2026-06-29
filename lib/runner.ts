@@ -227,6 +227,13 @@ class AgentRunner extends EventEmitter {
           source: p.source,
           kind: p.kind,
           match: p.matchLabel,
+          // Frame identity — ties this bet to the exact real TxLINE market it was
+          // taken on (joins to the captured-frame ledger for verification).
+          fixtureId: p.market.fixtureId,
+          superOddsType: p.market.superOddsType,
+          marketParameters: p.market.marketParameters,
+          sideIndex: p.market.sideIndex,
+          entryProb: p.entryProb,
           side: p.side,
           direction: p.direction,
           odds: p.entryOdds,
