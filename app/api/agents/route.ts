@@ -1,7 +1,7 @@
 // /api/agents — read agent/runner state; create or control agents.
 import { NextResponse } from "next/server";
 import { getRunner } from "@/lib/runner";
-import { PAPERS } from "@/lib/papers";
+import { PAPERS, DEFAULT_BASE_LEVERS, type AgentLevers } from "@/lib/papers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,10 +25,16 @@ export async function POST(req: Request) {
 
   if (body.action === "create") {
     const name = String(body.name || "").trim();
-    const paperId = String(body.paperId || "");
-    if (!name || !paperId) return NextResponse.json({ error: "name and paperId required" }, { status: 400 });
-    const agent = runner.createAgent(name, paperId, (body.levers as Record<string, never>) || {});
-    if (!agent) return NextResponse.json({ error: "unknown paper" }, { status: 400 });
+    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+    // Accept the new multi-paper shape, and stay back-compatible with a single paperId.
+    const rawPapers = Array.isArray(body.paperIds)
+      ? (body.paperIds as unknown[]).map(String)
+      : body.paperId
+        ? [String(body.paperId)]
+        : [];
+    const baseLevers = (body.baseLevers as AgentLevers) || (body.levers as AgentLevers) || DEFAULT_BASE_LEVERS;
+    const agent = runner.createAgent(name, { paperIds: rawPapers, baseLevers });
+    if (!agent) return NextResponse.json({ error: "agent must trade at least one signal" }, { status: 400 });
     return NextResponse.json({ ok: true, agent });
   }
 

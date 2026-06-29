@@ -1,20 +1,50 @@
 // FEED — the single upstream that powers the engine.
 //
-// Two sources:
-//   • "live"  — the real TxLINE odds + scores SSE streams (token held in env).
-//   • "synth" — a deterministic, seeded generator that produces drifting odds,
-//               steam jumps, and a scripted goal so the autonomous runner is
-//               demoable with NO live match (matches end before judging).
+// Three sources:
+//   • "replay" — REAL TxLINE matches that were captured live (odds history is
+//                gated upstream, so the demargined book is recorded off the SSE
+//                while the match plays), bundled into lib/replays.json and
+//                replayed through the engine. All captured matches run AT ONCE
+//                on one accelerated, looping timeline so the demo always shows
+//                agents ingesting real data and trading fake-USD on it.
+//   • "live"   — the real TxLINE odds + scores SSE streams (token held in env).
+//   • "synth"  — a deterministic, seeded generator (steam jumps + a scripted
+//                goal) for a self-contained demo with no data dependency.
 //
-// Default is synth unless FEED_MODE=live AND a token is present. One engine per
-// process, stashed on globalThis so Next's HMR / route re-entry reuse it.
+// Default is replay if captures exist, else synth. live needs FEED_MODE=live +
+// a token. One engine per process, stashed on globalThis so Next's HMR / route
+// re-entry reuse it.
 
 import { EdgeEngine } from "./edge/engine.mjs";
 import { openStream, txlineCreds } from "./txline/stream";
 import type { Edge } from "./edge/types";
+import replaysData from "./replays.json";
 
-export type FeedMode = "synth" | "live";
+export type FeedMode = "synth" | "live" | "replay";
 export type FeedStatus = "idle" | "starting" | "live" | "error";
+
+interface ReplayRecord {
+  FixtureId: string | number;
+  Ts: number;
+  [k: string]: unknown;
+}
+interface ReplayMatch {
+  fid: string | number;
+  p1: string;
+  p2: string;
+  odds: ReplayRecord[];
+  scores: ReplayRecord[];
+}
+const REPLAYS = replaysData as unknown as ReplayMatch[];
+
+// Per-match ingestion tally — the provenance proof ("we ingested this data").
+export interface MatchProvenance {
+  fid: string;
+  label: string;
+  oddsFrames: number;
+  scoreFrames: number;
+  ingested: number; // frames actually fed so far (this run)
+}
 
 export interface EngineLike {
   on(ev: "edge" | "edgeClosed", cb: (e: Edge) => void): void;
@@ -34,6 +64,7 @@ export interface FeedHandle {
   startedAt: number;
   error?: string;
   labels: Map<string, string>; // fixtureId -> "P1 v P2"
+  provenance: Map<string, MatchProvenance>; // fixtureId -> ingestion tally
 }
 
 const SYNTH_OPTS = {
@@ -44,6 +75,23 @@ const SYNTH_OPTS = {
   historyMs: 60_000,
   edgeTtlMs: 25_000,
   edgeCooldownMs: 12_000,
+};
+
+// REPLAY tuning. Detection windows/thresholds are in MATCH time (the engine reads
+// them against each record's Ts, which we preserve from the capture). Real books
+// move less cleanly than synth, so thresholds are lower. TTL/cooldown are WALL
+// time (the engine uses Date.now for edge lifecycle) — kept short because the
+// runner stakes synchronously the instant an edge fires.
+const REPLAY_OPTS = {
+  steamThreshold: 0.015, // 1.5pp fair-prob move (calibrated to real in-play books)…
+  steamWindowMs: 90_000, // …within 90s of match time
+  overreactionThreshold: 0.03, // 3pp post-event swing
+  overreactionWindowMs: 150_000,
+  quoteThreshold: 0.005, // baseline: ≥0.5pp drift surfaces a tradeable "quote"
+  quoteWindowMs: 60_000,
+  historyMs: 300_000,
+  edgeTtlMs: 8_000, // wall: stake window
+  edgeCooldownMs: 6_000, // wall: re-fire spacing per market+kind
 };
 
 // ---- deterministic PRNG (mulberry32) -----------------------------------
@@ -191,6 +239,80 @@ function startLive(engine: EngineLike, handle: FeedHandle): void {
   void run("/api/scores/stream", (r) => engine.ingestScores(r));
 }
 
+// ---- replay: all captured real matches at once, looping ----------------
+interface ReplayEvent {
+  offset: number; // ms from this match's first odds frame
+  kind: "odds" | "scores";
+  rec: ReplayRecord;
+  prov: MatchProvenance;
+}
+
+function startReplay(engine: EngineLike, handle: FeedHandle): void {
+  const events: ReplayEvent[] = [];
+
+  for (const m of REPLAYS) {
+    if (!m.odds?.length) continue;
+    const fid = String(m.fid);
+    const label = `${m.p1} v ${m.p2}`;
+    handle.labels.set(fid, label);
+    const prov: MatchProvenance = { fid, label, oddsFrames: m.odds.length, scoreFrames: m.scores.length, ingested: 0 };
+    handle.provenance.set(fid, prov);
+
+    // Anchor the timeline to the in-play odds window; drop stale pre-match
+    // coverage records (their Ts can be days before kickoff).
+    const firstOdds = Math.min(...m.odds.map((o) => o.Ts));
+    const windowStart = firstOdds - 5 * 60_000;
+    const push = (rec: ReplayRecord, kind: "odds" | "scores") => {
+      if (rec.Ts < windowStart) return;
+      events.push({ offset: rec.Ts - firstOdds, kind, rec, prov });
+    };
+    for (const o of m.odds) push(o, "odds");
+    for (const s of m.scores) push(s, "scores");
+  }
+
+  events.sort((a, b) => a.offset - b.offset);
+  if (!events.length) {
+    handle.status = "error";
+    handle.error = "no replay data bundled (run scripts/import_replays.mjs)";
+    return;
+  }
+
+  const SPEED = Number(process.env.REPLAY_SPEED) || 30; // match-seconds per wall-second
+  const span = events[events.length - 1].offset; // match-ms of the longest timeline
+  const LOOP_GAP = 90_000; // match-ms of quiet between loops
+  const loopLen = span + LOOP_GAP;
+
+  const t0wall = Date.now();
+  const t0virtual = Date.now(); // virtual match clock base (monotonic across loops)
+  let i = 0;
+  let loop = 0;
+
+  const tick = () => {
+    const matchElapsed = (Date.now() - t0wall) * SPEED; // total match-ms since start
+    let guard = 0;
+    for (;;) {
+      if (i >= events.length) {
+        i = 0;
+        loop += 1;
+      }
+      const e = events[i];
+      const absOffset = loop * loopLen + e.offset;
+      if (absOffset > matchElapsed) break;
+      // Rewrite Ts onto the monotonic virtual timeline so the engine's match-time
+      // windows stay correct and self-trim across loops.
+      const rec = { ...e.rec, Ts: t0virtual + absOffset };
+      if (e.kind === "odds") engine.ingestOdds(rec);
+      else engine.ingestScores(rec);
+      e.prov.ingested += 1;
+      i += 1;
+      if (++guard > 4000) break; // batch cap per tick
+    }
+  };
+
+  const iv = setInterval(tick, 200);
+  (iv as { unref?: () => void }).unref?.();
+}
+
 // ---- singleton ---------------------------------------------------------
 const KEY = "__agenthesis_feed__";
 
@@ -198,9 +320,18 @@ export function getFeed(): FeedHandle {
   const g = globalThis as unknown as Record<string, FeedHandle | undefined>;
   if (g[KEY]) return g[KEY]!;
 
-  const wantLive = process.env.FEED_MODE === "live";
-  const mode: FeedMode = wantLive && txlineCreds() ? "live" : "synth";
-  const engine = new EdgeEngine(mode === "synth" ? SYNTH_OPTS : {}) as unknown as EngineLike;
+  // Mode resolution: explicit FEED_MODE wins; otherwise prefer real captured
+  // matches (replay) when bundled, else fall back to synth.
+  const want = process.env.FEED_MODE as FeedMode | undefined;
+  const hasCaptures = REPLAYS.length > 0;
+  let mode: FeedMode;
+  if (want === "live" && txlineCreds()) mode = "live";
+  else if (want === "synth") mode = "synth";
+  else if (want === "replay" || hasCaptures) mode = "replay";
+  else mode = "synth";
+
+  const opts = mode === "synth" ? SYNTH_OPTS : mode === "replay" ? REPLAY_OPTS : {};
+  const engine = new EdgeEngine(opts) as unknown as EngineLike;
 
   const handle: FeedHandle = {
     engine,
@@ -208,15 +339,13 @@ export function getFeed(): FeedHandle {
     status: "starting",
     startedAt: Date.now(),
     labels: new Map(),
+    provenance: new Map(),
   };
 
-  if (mode === "synth") {
-    startSynth(engine, handle.labels);
-    handle.status = "live";
-  } else {
-    startLive(engine, handle);
-    handle.status = "live";
-  }
+  if (mode === "synth") startSynth(engine, handle.labels);
+  else if (mode === "replay") startReplay(engine, handle);
+  else startLive(engine, handle);
+  handle.status = "live";
 
   g[KEY] = handle;
   return handle;

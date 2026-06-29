@@ -14,8 +14,8 @@ interface Activity {
 interface AgentView {
   id: string;
   name: string;
-  paperTitle: string;
-  edgeKind: string;
+  title: string;
+  edgeKinds: string[];
   status: "running" | "paused" | "stopped";
   bankroll: number;
   startBankroll: number;
@@ -34,11 +34,27 @@ interface Proof {
   explorerUrl: string | null;
 }
 
+interface MatchProv {
+  fid: string;
+  label: string;
+  oddsFrames: number;
+  scoreFrames: number;
+  ingested: number;
+}
+
 interface Snapshot {
   mode: string;
   status: string;
   proof?: Proof;
+  provenance?: MatchProv[];
+  totalIngested?: number;
   agents: AgentView[];
+}
+
+function sourceLabel(mode?: string): string {
+  if (mode === "replay") return "TxLINE captured matches (replay)";
+  if (mode === "live") return "TxLINE live feed";
+  return "synth (deterministic demo)";
 }
 
 function clock(ts: number): string {
@@ -121,12 +137,16 @@ export default function Desk() {
         </div>
       </div>
 
-      {/* provenance — the on-chain proof of access */}
+      {/* provenance — proof of ingestion + on-chain proof of access */}
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-faint">
         <span className="label">data source</span>
-        <span className="text-muted">
-          {snap?.mode === "live" ? "TxLINE live feed" : "synth (deterministic demo)"}
-        </span>
+        <span className="text-muted">{sourceLabel(snap?.mode)}</span>
+        {typeof snap?.totalIngested === "number" && snap.totalIngested > 0 && (
+          <>
+            <span className="text-ink-500">·</span>
+            <span className="text-muted tabular-nums">{snap.totalIngested.toLocaleString()} frames ingested</span>
+          </>
+        )}
         {snap?.proof?.signedOnSolana && (
           <>
             <span className="text-ink-500">·</span>
@@ -142,6 +162,23 @@ export default function Desk() {
           </>
         )}
       </div>
+
+      {/* per-match ingestion tallies — the "we ingested this real data" proof */}
+      {!!snap?.provenance?.length && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {snap.provenance.map((m) => (
+            <span
+              key={m.fid}
+              className="card flex items-center gap-2 px-3 py-1.5 text-xs"
+              title={`${m.oddsFrames} odds + ${m.scoreFrames} score frames captured live from TxLINE`}
+            >
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber" />
+              <span className="text-fg">{m.label}</span>
+              <span className="text-faint tabular-nums">{m.ingested.toLocaleString()} frames</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-12">
         {/* HERO — live autonomous activity */}
@@ -194,9 +231,11 @@ export default function Desk() {
                     />
                     {a.name}
                   </p>
-                  <p className="serif mt-0.5 truncate text-sm text-muted">{a.paperTitle}</p>
+                  <p className="serif mt-0.5 truncate text-sm text-muted">{a.title}</p>
                 </div>
-                <span className="label shrink-0 rounded border border-ink-600 px-1.5 py-0.5">{a.edgeKind}</span>
+                <span className="label shrink-0 rounded border border-ink-600 px-1.5 py-0.5">
+                  {(a.edgeKinds ?? []).join("·")}
+                </span>
               </div>
 
               <div className="mt-3 flex items-end justify-between">

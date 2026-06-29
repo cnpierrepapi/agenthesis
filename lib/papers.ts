@@ -10,6 +10,7 @@
 import type { EdgeKind } from "./edge/types";
 
 export interface AgentLevers {
+  edgeKinds: EdgeKind[]; // which signals this lever set trades (base default: ["quote"])
   minConviction: number; // edgeMeasure threshold (fair-prob move, 0.01–0.20)
   stakeMode: "flat" | "kelly";
   stakePct: number; // flat: fraction of bankroll per bet (0.01–0.25)
@@ -22,6 +23,16 @@ export interface AgentLevers {
   oddsMax: number;
   maxConcurrent: number; // open positions cap
   direction: "follow" | "fade"; // follow the engine's call, or invert it
+}
+
+// A resolved unit the agent actually trades: a lever set gated to certain edge
+// kinds. An agent runs its base-tuning strategy plus one per attached paper.
+export interface Strategy {
+  label: string; // e.g. "base tuning" or the paper title
+  source: "base" | "paper";
+  paperId?: string;
+  edgeKinds: EdgeKind[];
+  levers: AgentLevers;
 }
 
 export interface Paper {
@@ -38,7 +49,8 @@ export interface Paper {
 }
 
 const BASE: AgentLevers = {
-  minConviction: 0.04,
+  edgeKinds: ["quote"], // baseline data-trading; papers add steam/overreaction
+  minConviction: 0.003, // low floor: the engine already gates each signal's size
   stakeMode: "flat",
   stakePct: 0.05,
   kellyFraction: 0.5,
@@ -51,6 +63,11 @@ const BASE: AgentLevers = {
   maxConcurrent: 3,
   direction: "follow",
 };
+
+// The default tuning for a freshly-built agent with no papers attached: it
+// trades the baseline "quote" signal on the live book (proves autonomous play
+// on real data). Attaching papers layers steam / overreaction edges on top.
+export const DEFAULT_BASE_LEVERS: AgentLevers = { ...BASE };
 
 export const AGI_PER_PAPER = 1000; // ≈ $3.50 USDC-equivalent
 
@@ -169,3 +186,29 @@ export function getPaper(id: string): Paper | undefined {
 }
 
 export const FREE_PAPERS = PAPERS.filter((p) => p.free).map((p) => p.id);
+
+// Compose an agent's runnable strategies: one per attached paper (priority) plus
+// the always-on base tuning (lowest priority). decide() tries them in order.
+export function buildStrategies(baseLevers: AgentLevers, paperIds: string[]): Strategy[] {
+  const strategies: Strategy[] = [];
+  for (const pid of paperIds || []) {
+    const p = getPaper(pid);
+    if (!p) continue;
+    strategies.push({
+      label: p.title,
+      source: "paper",
+      paperId: p.id,
+      edgeKinds: [p.edgeKind],
+      levers: { ...p.levers, edgeKinds: [p.edgeKind] },
+    });
+  }
+  if (baseLevers?.edgeKinds?.length) {
+    strategies.push({
+      label: "base tuning",
+      source: "base",
+      edgeKinds: baseLevers.edgeKinds,
+      levers: baseLevers,
+    });
+  }
+  return strategies;
+}

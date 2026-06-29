@@ -5,7 +5,7 @@
 // stay fully typed while the logic stays testable in isolation.
 
 import type { Edge, EdgeDirection, EdgeMarketMeta, EdgeKind } from "./edge/types";
-import type { AgentLevers } from "./papers";
+import type { AgentLevers, Strategy } from "./papers";
 import { decide as decideCore, markPosition as markCore } from "./agent-core.mjs";
 
 export type AgentStatus = "running" | "paused" | "stopped";
@@ -15,7 +15,8 @@ export interface Position {
   id: string;
   agentId: string;
   edgeId: string;
-  paperId: string;
+  source: string; // which strategy took it ("base tuning" or a paper title)
+  paperId: string | null;
   kind: EdgeKind;
   market: EdgeMarketMeta;
   matchLabel: string;
@@ -24,6 +25,7 @@ export interface Position {
   entryProb: number;
   entryOdds: number;
   stake: number;
+  proofHash: string; // fingerprint of the real TxLINE frame this trade was taken on
   openedAt: number;
   holdUntil: number;
   markProb: number;
@@ -35,10 +37,11 @@ export interface Position {
 export interface Agent {
   id: string;
   name: string;
-  paperId: string;
-  paperTitle: string;
-  edgeKind: EdgeKind;
-  levers: AgentLevers;
+  papers: string[]; // attached paper ids (0..n)
+  baseLevers: AgentLevers; // the user-tuned, always-on base strategy
+  strategies: Strategy[]; // resolved: base tuning + one per paper
+  title: string; // display summary, e.g. "Base + 2 papers"
+  edgeKinds: EdgeKind[]; // union of what it trades (display tags)
   status: AgentStatus;
   startBankroll: number;
   bankroll: number;
@@ -53,6 +56,8 @@ export interface Agent {
 export interface Decision {
   take: boolean;
   reason: string;
+  source?: string;
+  paperId?: string | null;
   side?: string;
   direction?: EdgeDirection;
   stake?: number;

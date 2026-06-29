@@ -1,7 +1,7 @@
 // Shared types for the edge engine (the runtime lives in engine.mjs, which is
 // imported untyped via allowJs; these interfaces describe the shapes it emits).
 
-export type EdgeKind = "steam" | "overreaction";
+export type EdgeKind = "steam" | "overreaction" | "quote";
 export type EdgeDirection = "back" | "lay";
 export type Conviction = "High" | "Medium" | "Low";
 export type EdgeStatus = "open" | "expired" | "filled";

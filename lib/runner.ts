@@ -8,13 +8,15 @@
 import { EventEmitter } from "node:events";
 import { getFeed, type FeedHandle } from "./feed";
 import { decide, markPosition, type Agent, type Position } from "./agent";
-import { getPaper, type AgentLevers } from "./papers";
+import { getPaper, buildStrategies, DEFAULT_BASE_LEVERS, type AgentLevers } from "./papers";
+import type { EdgeKind } from "./edge/types";
 import { getProof } from "./proof";
 import type { Edge } from "./edge/types";
 
 const START_BANKROLL = 350; // universal — every agent starts equal
 const HOLD_MS_SYNTH = 12_000;
 const HOLD_MS_LIVE = 90_000;
+const HOLD_MS_REPLAY = 10_000; // wall: ~5 match-min of CLV horizon at 30× replay
 const MARK_MS = 2_500;
 
 export interface RunnerActivity {
@@ -35,7 +37,8 @@ class AgentRunner extends EventEmitter {
   constructor() {
     super();
     this.feed = getFeed();
-    this.holdMs = this.feed.mode === "synth" ? HOLD_MS_SYNTH : HOLD_MS_LIVE;
+    this.holdMs =
+      this.feed.mode === "synth" ? HOLD_MS_SYNTH : this.feed.mode === "replay" ? HOLD_MS_REPLAY : HOLD_MS_LIVE;
 
     this.feed.engine.on("edge", (e) => this.onEdge(e));
     this.feed.engine.on("matchEvent", (m) =>
@@ -52,22 +55,49 @@ class AgentRunner extends EventEmitter {
     return this.feed.labels.get(String(fixtureId)) || `#${fixtureId}`;
   }
 
+  // Deterministic fingerprint of the real TxLINE frame a trade was taken on, so
+  // a position is verifiably tied to ingested data (FNV-1a, 8 hex chars).
+  private proofHash(edge: Edge): string {
+    const s = `${edge.market.fixtureId}|${edge.market.superOddsType}|${edge.market.marketParameters}|${edge.market.side}|${edge.fairProb.toFixed(4)}|${edge.kind}`;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16).padStart(8, "0");
+  }
+
   private push(a: RunnerActivity) {
     this.emit("activity", a);
   }
 
   // ---- agent lifecycle --------------------------------------------------
-  createAgent(name: string, paperId: string, leverOverrides: Partial<AgentLevers> = {}): Agent | null {
-    const paper = getPaper(paperId);
-    if (!paper) return null;
+  // An agent = an always-on base tuning PLUS any attached papers. With no papers
+  // it trades the baseline "quote" signal on the live book; each paper adds a
+  // calibrated steam / overreaction strategy on top.
+  createAgent(
+    name: string,
+    opts: { paperIds?: string[]; baseLevers?: AgentLevers } = {},
+  ): Agent | null {
+    const paperIds = (opts.paperIds || []).filter((pid) => !!getPaper(pid));
+    const baseLevers = opts.baseLevers || DEFAULT_BASE_LEVERS;
+    const strategies = buildStrategies(baseLevers, paperIds);
+    if (!strategies.length) return null;
+
+    const edgeKinds = [...new Set(strategies.flatMap((s) => s.edgeKinds))] as EdgeKind[];
+    const title = paperIds.length
+      ? `Base + ${paperIds.length} paper${paperIds.length > 1 ? "s" : ""}`
+      : "Base tuning";
+
     const id = `agent_${++this.seq}`;
     const agent: Agent = {
       id,
       name,
-      paperId,
-      paperTitle: paper.title,
-      edgeKind: paper.edgeKind,
-      levers: { ...paper.levers, ...leverOverrides },
+      papers: paperIds,
+      baseLevers,
+      strategies,
+      title,
+      edgeKinds,
       status: "running",
       startBankroll: START_BANKROLL,
       bankroll: START_BANKROLL,
@@ -106,7 +136,8 @@ class AgentRunner extends EventEmitter {
         id: `pos_${++this.seq}`,
         agentId: agent.id,
         edgeId: edge.id,
-        paperId: agent.paperId,
+        source: d.source || "base tuning",
+        paperId: d.paperId ?? null,
         kind: edge.kind,
         market: edge.market,
         matchLabel: `${this.label(edge.market.fixtureId)} · ${edge.market.superOddsType} ${edge.market.marketParameters}`,
@@ -115,6 +146,7 @@ class AgentRunner extends EventEmitter {
         entryProb: d.entryProb!,
         entryOdds: d.entryOdds!,
         stake: res.accepted,
+        proofHash: this.proofHash(edge),
         openedAt: now,
         holdUntil: now + this.holdMs,
         markProb: d.entryProb!,
@@ -129,7 +161,7 @@ class AgentRunner extends EventEmitter {
         ts: now,
         agentId: agent.id,
         agentName: agent.name,
-        text: `${agent.name} → ${pos.direction.toUpperCase()} ${pos.side} @ ${pos.entryOdds.toFixed(2)} on ${pos.matchLabel} ($${pos.stake.toFixed(0)}, ${edge.conviction})`,
+        text: `${agent.name} → ${pos.direction.toUpperCase()} ${pos.side} @ ${pos.entryOdds.toFixed(2)} on ${pos.matchLabel} ($${pos.stake.toFixed(0)}, ${edge.kind}·${edge.conviction}) · frame ${pos.proofHash}`,
       });
     }
   }
@@ -165,19 +197,31 @@ class AgentRunner extends EventEmitter {
   }
 
   // ---- demo agents so the desk shows autonomous trading immediately -----
+  // Each carries the always-on base (quote) tuning; the latter three add a paper.
+  // Base tuning is varied per agent so they diverge from the first trade rather
+  // than moving in lockstep on the shared baseline signal.
   private seedDemoAgents() {
     if (this.agents.size) return;
-    this.createAgent("The Closer", "steam-base");
-    this.createAgent("Mean Reverter", "overreaction-base");
-    this.createAgent("The Cynic", "overreaction-redcard");
+    const base = (over: Partial<AgentLevers>): AgentLevers => ({ ...DEFAULT_BASE_LEVERS, ...over });
+    // base only — trades the live book continuously
+    this.createAgent("Market Pulse", { baseLevers: base({ stakePct: 0.04, maxConcurrent: 4 }) });
+    this.createAgent("The Closer", { paperIds: ["steam-base"], baseLevers: base({ stakePct: 0.05 }) });
+    this.createAgent("Mean Reverter", { paperIds: ["overreaction-base"], baseLevers: base({ stakePct: 0.06, direction: "fade" }) });
+    this.createAgent("The Cynic", { paperIds: ["overreaction-redcard"], baseLevers: base({ stakePct: 0.03, maxConcurrent: 2 }) });
   }
 
   // ---- serializable state for the API -----------------------------------
   snapshot() {
+    const provenance = [...this.feed.provenance.values()];
+    const totalIngested = provenance.reduce((s, p) => s + p.ingested, 0);
     return {
       mode: this.feed.mode,
       status: this.feed.status,
       proof: getProof(),
+      // Provenance: which REAL matches are loaded and how many frames the engine
+      // has ingested from each — the "we ingested this data" half of the proof.
+      provenance,
+      totalIngested,
       agents: [...this.agents.values()].map((a) => ({
         ...a,
         openPositions: a.positions.filter((p) => p.status === "open").length,

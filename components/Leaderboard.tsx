@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 interface AgentView {
   id: string;
   name: string;
-  paperTitle: string;
-  edgeKind: string;
+  title: string;
+  edgeKinds: string[];
   status: string;
   bankroll: number;
   dayPnl: number;
@@ -117,7 +117,7 @@ export default function Leaderboard() {
             <div className="min-w-0">
               <p className="truncate font-semibold">{a.name}</p>
               <p className="truncate text-xs text-faint">
-                {a.edgeKind} · {a.wins}W/{a.losses}L
+                {(a.edgeKinds ?? []).join("·")} · {a.wins}W/{a.losses}L
               </p>
             </div>
             <span className={`hidden tabular-nums sm:block ${a.dayPnl >= 0 ? "gain" : "loss"}`}>{money(a.dayPnl)}</span>
