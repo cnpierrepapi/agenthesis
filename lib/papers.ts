@@ -1,0 +1,171 @@
+// PAPER CATALOG — the strategy menu.
+//
+// A "paper" is a published market-inefficiency result rendered as a runnable
+// agent strategy. Each paper maps to one edge kind in the engine plus a
+// calibrated set of default levers (the "parameter variant" — the edge
+// conditioned on a specific match context). Two papers are FREE; the rest are
+// unlocked with AGI (1000 AGI ≈ $3.50 each). AGI never buys bankroll, only
+// access to more strategies — every agent starts from the same fake-USD float.
+
+import type { EdgeKind } from "./edge/types";
+
+export interface AgentLevers {
+  minConviction: number; // edgeMeasure threshold (fair-prob move, 0.01–0.20)
+  stakeMode: "flat" | "kelly";
+  stakePct: number; // flat: fraction of bankroll per bet (0.01–0.25)
+  kellyFraction: number; // kelly: fraction of full Kelly (0.1–1.0)
+  phase: "pre" | "inplay" | "both";
+  minMinute: number; // in-play minute gate
+  maxMinute: number;
+  marketFilter: string[]; // allowed SuperOddsType values; [] = any
+  oddsMin: number; // decimal-odds band
+  oddsMax: number;
+  maxConcurrent: number; // open positions cap
+  direction: "follow" | "fade"; // follow the engine's call, or invert it
+}
+
+export interface Paper {
+  id: string;
+  title: string;
+  authors: string;
+  year: number;
+  edgeKind: EdgeKind;
+  doi: string; // stylised reference id (display)
+  free: boolean;
+  abstract: string;
+  tags: string[];
+  levers: AgentLevers;
+}
+
+const BASE: AgentLevers = {
+  minConviction: 0.04,
+  stakeMode: "flat",
+  stakePct: 0.05,
+  kellyFraction: 0.5,
+  phase: "both",
+  minMinute: 0,
+  maxMinute: 90,
+  marketFilter: [],
+  oddsMin: 1.3,
+  oddsMax: 6.0,
+  maxConcurrent: 3,
+  direction: "follow",
+};
+
+export const AGI_PER_PAPER = 1000; // ≈ $3.50 USDC-equivalent
+
+export const PAPERS: Paper[] = [
+  // --- the two FREE base papers ----------------------------------------
+  {
+    id: "steam-base",
+    title: "Sharp Money and the Information Content of Line Moves",
+    authors: "Gandar, Zuber & Lamb",
+    year: 2001,
+    edgeKind: "steam",
+    doi: "AGTH-0001",
+    free: true,
+    abstract:
+      "Late, sharp adjustments to the no-vig fair price carry information: the side a steam move favours wins more often than its closing odds imply. Back the move within the window.",
+    tags: ["steam", "line-move", "clv"],
+    levers: { ...BASE, direction: "follow" },
+  },
+  {
+    id: "overreaction-base",
+    title: "Market Overreaction to Salient In-Play Events",
+    authors: "Croxson & Reade",
+    year: 2014,
+    edgeKind: "overreaction",
+    doi: "AGTH-0002",
+    free: true,
+    abstract:
+      "Immediately after a goal or red card the fair line overshoots the true probability shift. The overshoot mean-reverts within minutes. Fade the swing.",
+    tags: ["overreaction", "in-play", "mean-reversion"],
+    levers: { ...BASE, direction: "follow", phase: "inplay" },
+  },
+
+  // --- AGI-locked calibrated variants ----------------------------------
+  {
+    id: "steam-favourite",
+    title: "Steam on Short-Priced Favourites",
+    authors: "Levitt",
+    year: 2004,
+    edgeKind: "steam",
+    doi: "AGTH-0103",
+    free: false,
+    abstract:
+      "Steam moves on already-short prices are the most information-rich and least noise-prone. Restrict to the favourite band and raise the conviction floor.",
+    tags: ["steam", "favourite", "high-conviction"],
+    levers: { ...BASE, minConviction: 0.06, oddsMin: 1.3, oddsMax: 2.5 },
+  },
+  {
+    id: "steam-longshot-fade",
+    title: "The Favourite–Longshot Bias in Drifting Markets",
+    authors: "Snowberg & Wolfers",
+    year: 2010,
+    edgeKind: "steam",
+    doi: "AGTH-0104",
+    free: false,
+    abstract:
+      "Longshots are systematically overbet; steam drifting a longshot out is the market correcting. Fade steam in the high-odds band to harvest the bias.",
+    tags: ["longshot-bias", "fade", "value"],
+    levers: { ...BASE, direction: "fade", oddsMin: 3.0, oddsMax: 6.0 },
+  },
+  {
+    id: "overreaction-redcard",
+    title: "Red Cards and the Mispricing of Numerical Disadvantage",
+    authors: "Vecer, Kopriva & Ichiba",
+    year: 2009,
+    edgeKind: "overreaction",
+    doi: "AGTH-0105",
+    free: false,
+    abstract:
+      "Markets over-penalise the team reduced to ten, especially early. The implied swing exceeds the true expected-goals impact. Fade the post-red-card overshoot.",
+    tags: ["red-card", "overreaction", "in-play"],
+    levers: { ...BASE, direction: "follow", phase: "inplay", minConviction: 0.08 },
+  },
+  {
+    id: "overreaction-lategoal",
+    title: "Late-Goal Overshoots and Closing-Line Reversion",
+    authors: "Reade & Singleton",
+    year: 2021,
+    edgeKind: "overreaction",
+    doi: "AGTH-0106",
+    free: false,
+    abstract:
+      "Goals after the 60th minute trigger the largest line overshoots as books chase momentum. Fade late-game swings with a higher conviction floor.",
+    tags: ["late-goal", "overreaction", "momentum"],
+    levers: { ...BASE, direction: "follow", phase: "inplay", minMinute: 60, minConviction: 0.1 },
+  },
+  {
+    id: "steam-prematch",
+    title: "Pre-Match Steam and Closing-Line Value",
+    authors: "Hubáček, Šourek & Železný",
+    year: 2019,
+    edgeKind: "steam",
+    doi: "AGTH-0107",
+    free: false,
+    abstract:
+      "Pre-kickoff steam predicts the closing line. Trade only before kickoff and measure success purely by beating the close.",
+    tags: ["pre-match", "steam", "clv"],
+    levers: { ...BASE, phase: "pre", maxMinute: 0 },
+  },
+  {
+    id: "overreaction-kelly",
+    title: "Optimal Sizing of Mean-Reversion Edges",
+    authors: "Kelly (after)",
+    year: 1956,
+    edgeKind: "overreaction",
+    doi: "AGTH-0108",
+    free: false,
+    abstract:
+      "The overreaction edge with fractional-Kelly sizing: stake proportional to the measured mispricing rather than a flat fraction, capped to control variance.",
+    tags: ["kelly", "sizing", "overreaction"],
+    levers: { ...BASE, direction: "follow", phase: "inplay", stakeMode: "kelly", kellyFraction: 0.5 },
+  },
+];
+
+export function getPaper(id: string): Paper | undefined {
+  return PAPERS.find((p) => p.id === id);
+}
+
+export const FREE_PAPERS = PAPERS.filter((p) => p.free).map((p) => p.id);

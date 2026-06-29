@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/*
+  AGENTHESIS — "Research Desk" theme.
+  A quant-research terminal: ink-dark surfaces, amber as the single live accent,
+  monospace data, a serif reserved for paper titles. A dash of a coding-agent
+  terminal (rails, prompt glyphs, faint grid) for the autonomous-desk feel.
+*/
+@theme {
+  --color-ink-900: #0a0c0f; /* deepest background */
+  --color-ink-850: #0d1014;
+  --color-ink-800: #11151a; /* panels */
+  --color-ink-700: #171c22; /* cards */
+  --color-ink-600: #222a32; /* borders */
+  --color-ink-500: #2e3742;
+
+  --color-paper: #e9e4d8; /* serif paper-title ink */
+  --color-fg: #d6dbe1; /* primary text */
+  --color-muted: #8a949f; /* secondary text */
+  --color-faint: #5b656f; /* tertiary / labels */
+
+  --color-amber: #f5a623; /* THE accent — live, money, signal */
+  --color-amber-soft: #c9821c;
+  --color-amber-dim: #6b4d18;
+
+  --color-gain: #3fb27f; /* positive PnL */
+  --color-loss: #e0574b; /* negative PnL */
+  --color-info: #5a9bd4; /* neutral data highlight */
+
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-serif: "Newsreader", Georgia, "Times New Roman", serif;
+}
+
+html,
+body {
+  background: var(--color-ink-900);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* faint engineering grid, like a notebook under glass */
+body {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: center top;
+}
+
+::selection {
+  background: var(--color-amber);
+  color: var(--color-ink-900);
+}
+
+/* --- reusable Research Desk primitives -------------------------------- */
+.panel {
+  background: var(--color-ink-800);
+  border: 1px solid var(--color-ink-600);
+  border-radius: 10px;
+}
+.card {
+  background: var(--color-ink-700);
+  border: 1px solid var(--color-ink-600);
+  border-radius: 10px;
+}
+.hairline {
+  border-color: var(--color-ink-600);
+}
+.label {
+  color: var(--color-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.66rem;
+}
+.serif {
+  font-family: var(--font-serif);
+  color: var(--color-paper);
+}
+/* a coding-agent style prompt rail */
+.prompt::before {
+  content: "›";
+  color: var(--color-amber);
+  margin-right: 0.5rem;
+}
+.amber {
+  color: var(--color-amber);
+}
+.gain {
+  color: var(--color-gain);
+}
+.loss {
+  color: var(--color-loss);
+}
+.blink {
+  animation: blink 1.1s steps(2, start) infinite;
+}
+@keyframes blink {
+  to {
+    opacity: 0.2;
+  }
+}
