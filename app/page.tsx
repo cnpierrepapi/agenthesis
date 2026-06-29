@@ -1,30 +1,125 @@
-// Placeholder landing — the full intro, paper library, builder, desk, and
-// leaderboard ship in the UI phases. Phase 1 lands the autonomous runner.
-export default function Home() {
-  return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-8 px-6 py-20">
-      <div>
-        <p className="label">Agenthesis · research desk</p>
-        <h1 className="serif mt-3 text-5xl leading-tight">
-          Strategies from research.
-          <br />
-          Agents that trade them.
-        </h1>
-        <p className="mt-5 max-w-xl text-muted">
-          Spawn autonomous betting agents whose strategy <em>is</em> a research
-          paper. They ingest the live World Cup feed and trade with no human in
-          the loop.
-        </p>
-      </div>
+import Link from "next/link";
+import Nav from "@/components/Nav";
+import HeroTerminal from "@/components/HeroTerminal";
+import { getProof } from "@/lib/proof";
+import { PAPERS } from "@/lib/papers";
 
-      <div className="panel p-5">
-        <p className="label mb-2">runner status</p>
-        <p className="prompt text-sm">
-          autonomous engine online — <span className="amber">/api/agents</span>{" "}
-          and <span className="amber">/api/feed</span> live.
-          <span className="blink ml-1 amber">_</span>
-        </p>
-      </div>
+const STEPS = [
+  { n: "01", t: "Pick a paper", d: "Each strategy is a published market-inefficiency result. Two are free; the rest unlock with AGI." },
+  { n: "02", t: "Tune & deploy", d: "Set conviction, sizing, phase, odds band and direction. Deploy an agent in one click." },
+  { n: "03", t: "It trades solo", d: "The agent ingests the live feed and places fake-USD bets autonomously — no human in the loop." },
+  { n: "04", t: "Settled on CLV", d: "Positions resolve on closing-line value. The on-chain record can't be cherry-picked." },
+];
+
+export default function Home() {
+  const proof = getProof();
+  const freeCount = PAPERS.filter((p) => p.free).length;
+
+  return (
+    <main className="min-h-screen">
+      <Nav />
+
+      {/* HERO */}
+      <section className="mx-auto max-w-7xl px-5 py-14">
+        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
+          <div>
+            <p className="label">research desk · autonomous agents</p>
+            <h1 className="serif mt-4 text-5xl leading-[1.05] sm:text-6xl">
+              Strategies from research.
+              <br />
+              Agents that trade them.
+            </h1>
+            <p className="mt-5 max-w-lg text-muted">
+              Spawn autonomous betting agents whose strategy <em>is</em> a research paper.
+              They ingest the live World Cup feed and trade with no human in the loop.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/desk"
+                className="rounded border border-amber-dim bg-amber/10 px-5 py-2.5 font-semibold text-amber hover:bg-amber/20"
+              >
+                Open the Desk →
+              </Link>
+              <Link
+                href="/papers"
+                className="rounded border border-ink-600 px-5 py-2.5 font-semibold text-muted hover:text-fg"
+              >
+                Browse research
+              </Link>
+            </div>
+          </div>
+          <HeroTerminal />
+        </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section className="border-t border-ink-600 bg-ink-850">
+        <div className="mx-auto max-w-7xl px-5 py-14">
+          <p className="label">how it works</p>
+          <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {STEPS.map((s) => (
+              <div key={s.n} className="card p-5">
+                <p className="amber font-mono text-sm">{s.n}</p>
+                <h3 className="serif mt-2 text-lg text-paper">{s.t}</h3>
+                <p className="mt-2 text-sm text-muted">{s.d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* THE EDGES */}
+      <section className="border-t border-ink-600">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-12">
+          <div className="max-w-xl">
+            <p className="label">the edges</p>
+            <h2 className="serif mt-2 text-2xl text-paper">Steam and overreaction, from the literature.</h2>
+            <p className="mt-2 text-sm text-muted">
+              Back the sharp money when the no-vig line moves; fade the overshoot after a goal or red card.
+              {" "}
+              {PAPERS.length} papers · {freeCount} free.
+            </p>
+          </div>
+          <Link href="/papers" className="prompt text-sm text-amber hover:text-fg">
+            See the library
+          </Link>
+        </div>
+      </section>
+
+      {/* PROVENANCE */}
+      <section className="border-t border-ink-600 bg-ink-850">
+        <div className="mx-auto max-w-7xl px-5 py-12">
+          <p className="label">provenance</p>
+          <h2 className="serif mt-2 text-2xl text-paper">Every signal from an on-chain-anchored feed.</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted">
+            Agents trade TxLINE&apos;s World Cup data layer — odds and scores cryptographically anchored on Solana.
+            Access is minted by a real on-chain transaction, so the data&apos;s provenance is publicly verifiable.
+          </p>
+          {proof.signedOnSolana ? (
+            <p className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+              <span className="amber">✓ access signed on Solana</span>
+              <span className="text-ink-500">·</span>
+              <a
+                href={proof.explorerUrl ?? "#"}
+                target="_blank"
+                rel="noreferrer"
+                className="text-muted underline decoration-ink-500 underline-offset-2 hover:text-fg"
+              >
+                tx {proof.signupTx?.slice(0, 6)}…{proof.signupTx?.slice(-4)} ({proof.cluster})
+              </a>
+            </p>
+          ) : (
+            <p className="mt-4 text-sm text-faint">TxLINE Solana-anchored World Cup feed.</p>
+          )}
+        </div>
+      </section>
+
+      <footer className="border-t border-ink-600">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-8 text-xs text-faint">
+          <span className="prompt">agenthesis</span>
+          <span>Built on TxLINE · AGPL-3.0</span>
+        </div>
+      </footer>
     </main>
   );
 }
