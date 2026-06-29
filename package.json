@@ -4,6 +4,17 @@
   "private": true,
   "description": "Autonomous betting agents whose strategy is a research paper. Built on the TxLINE World Cup data layer.",
   "type": "module",
+  "exports": {
+    ".": "./sdk/index.mjs",
+    "./sdk": "./sdk/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "sdk",
+    "lib/agent-core.mjs",
+    "lib/edge",
+    "examples/desk_quickstart.mjs"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",

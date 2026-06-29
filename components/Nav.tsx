@@ -11,6 +11,8 @@ const LINKS = [
   { href: "/build", label: "Build" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/proof", label: "Proof" },
+  { href: "/sdk", label: "SDK" },
+  { href: "/litepaper", label: "Litepaper" },
 ];
 
 export default function Nav() {

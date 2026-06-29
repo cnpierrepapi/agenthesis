@@ -1,0 +1,207 @@
+import Link from "next/link";
+
+const REPO = "https://github.com/cnpierrepapi/agenthesis";
+
+function Code({ children }: { children: string }) {
+  return (
+    <pre className="card overflow-x-auto p-4 text-[0.8rem] leading-relaxed text-fg">
+      <code>{children}</code>
+    </pre>
+  );
+}
+
+const PRIMITIVES = [
+  {
+    kind: "Signal",
+    fn: "EdgeEngine",
+    body: "Ingest the demargined book → emit typed, scored edges: steam (sharp fair-prob move), overreaction (post-event overshoot), quote (micro-drift baseline).",
+  },
+  {
+    kind: "Decision",
+    fn: "decide(agent, edge, ctx)",
+    body: "Pure mapping from an edge + your lever set → a sized bet (take / side / direction / stake). Flat or fractional-Kelly.",
+  },
+  {
+    kind: "Scoring",
+    fn: "markPosition / scoreCLV",
+    body: "Closing-line value — the skill metric. Resolves from odds alone, no match outcome required.",
+  },
+];
+
+const API = [
+  {
+    sig: "new EdgeEngine(opts?)",
+    desc: "Detection. ingestOdds(rec), ingestScores(rec), on(\"edge\"|\"edgeClosed\"|\"matchEvent\", cb), openEdges(), fairProbForMarket(market), matchMinute(fixtureId), stake(edgeId, amount). opts tune thresholds/windows.",
+  },
+  {
+    sig: "defineStrategy(levers?, { label, edgeKinds }?)",
+    desc: "A lever set gated to edge kinds. Levers: minConviction, stakeMode (flat|kelly), stakePct, kellyFraction, phase, minMinute/maxMinute, marketFilter, oddsMin/oddsMax, maxConcurrent, direction (follow|fade).",
+  },
+  {
+    sig: "createAgent({ bankroll, strategies, ... })",
+    desc: "An agent runs its strategies in order; the first that greenlights an edge takes it.",
+  },
+  {
+    sig: "decide(agent, edge, { minute, openCount })",
+    desc: "→ { take, reason, side, direction, stake, entryProb, entryOdds, ... }. Pure.",
+  },
+  {
+    sig: "markPosition(pos, closeProb) / scoreCLV({ entryProb, direction, stake }, closeProb)",
+    desc: "→ { clvReturn, pnl }. Pure. Constants: CONTINUATION_COEFF, KELLY_CAP, CLV_FLOOR, CLV_CEIL.",
+  },
+];
+
+export default function SdkDoc() {
+  return (
+    <div className="mx-auto max-w-5xl px-5 py-10">
+      <header className="mb-8">
+        <p className="label">developer access</p>
+        <h1 className="serif mt-1 text-4xl text-paper">Agenthesis SDK</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">
+          Embed the edge-detection engine and the CLV decision core directly in your own stack.
+          This is the integration path for a professional trading desk: you bring your own TxLINE
+          feed and your own strategies; the SDK turns the demargined price book into typed, scored
+          edges and grades every decision on closing-line value.
+        </p>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-faint">
+          It is the exact code the deployed product runs — pure functions, no I/O, no clock reads,
+          deterministic, and unit-tested (26 assertions). That is what makes it safe to put next to
+          real execution.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-3 text-sm">
+          <Link
+            href={`${REPO}/tree/master/sdk`}
+            className="rounded border border-amber-dim bg-amber/10 px-4 py-2 text-amber hover:bg-amber/20"
+          >
+            ◆ Source on GitHub ↗
+          </Link>
+          <Link
+            href={`${REPO}/blob/master/examples/desk_quickstart.mjs`}
+            className="card px-4 py-2 text-muted hover:text-fg"
+          >
+            Runnable example ↗
+          </Link>
+        </div>
+      </header>
+
+      {/* What it gives you */}
+      <section className="mb-10">
+        <p className="label mb-3">what it gives you</p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {PRIMITIVES.map((p) => (
+            <div key={p.kind} className="card p-4">
+              <p className="amber text-sm font-semibold">{p.kind}</p>
+              <p className="mt-1 font-mono text-xs text-info">{p.fn}</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted">{p.body}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-faint">
+          You keep ownership of the two things a desk should own: the feed (you push records in) and
+          the execution (you route the orders out). The SDK is the quantitative layer in between.
+        </p>
+      </section>
+
+      {/* Install */}
+      <section className="mb-10">
+        <p className="label mb-3">install</p>
+        <Code>{`# install straight from the repo
+npm install github:cnpierrepapi/agenthesis
+
+# the public surface is the self-contained "agenthesis/sdk" entry
+import { EdgeEngine, defineStrategy, createAgent, decide, markPosition }
+  from "agenthesis/sdk";`}</Code>
+        <p className="mt-2 text-xs text-faint">
+          The package exposes only the pure quant layer (engine + decision core + strategies). It
+          pulls in no runtime dependencies beyond Node&apos;s built-in <code className="text-info">events</code>.
+        </p>
+      </section>
+
+      {/* Quickstart */}
+      <section className="mb-10">
+        <p className="label mb-3">quickstart</p>
+        <Code>{`import { EdgeEngine, defineStrategy, createAgent, decide } from "agenthesis/sdk";
+
+const engine = new EdgeEngine();                       // detection thresholds
+const strat  = defineStrategy({ stakeMode: "kelly" }, { label: "my-desk" });
+const agent  = createAgent({ bankroll: 100_000, strategies: [strat] });
+
+engine.on("edge", (edge) => {
+  const minute = engine.matchMinute(edge.market.fixtureId);
+  const open   = agent.positions.filter((p) => p.status === "open").length;
+  const d = decide(agent, edge, { minute, openCount: open });
+  if (d.take) execution.place(d);                      // YOU route the order
+});
+
+engine.ingestOdds(txlineOddsRecord);                   // feed YOUR stream
+engine.ingestScores(txlineScoreRecord);`}</Code>
+        <p className="mt-3 text-xs text-muted">
+          A complete, runnable end-to-end backtest on real captured TxLINE frames:
+        </p>
+        <Code>{`node examples/desk_quickstart.mjs
+# Feeding Brazil v Japan — 13335 odds + 989 score frames…
+# 12936 edges -> 27 positions · win-rate 74% · avg CLV 3.05% · net +$10880.83 on $100k`}</Code>
+      </section>
+
+      {/* API */}
+      <section className="mb-10">
+        <p className="label mb-3">api reference</p>
+        <div className="panel divide-y divide-ink-600">
+          {API.map((a) => (
+            <div key={a.sig} className="p-4">
+              <p className="font-mono text-xs text-amber">{a.sig}</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted">{a.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* The model */}
+      <section className="mb-10">
+        <p className="label mb-3">the model</p>
+        <div className="card p-5 text-sm leading-relaxed text-muted">
+          <p>
+            TxLINE publishes a de-margined (no-vig) book, so for side <em className="text-fg">S</em>:{" "}
+            <code className="text-info">p = 1 / (price/1000)</code>,{" "}
+            <code className="text-info">O = 1/p</code>, <code className="text-info">b = O − 1</code>.
+            An edge of magnitude <em className="text-fg">m</em> implies expected captured move{" "}
+            <code className="text-info">ê = κ·m</code> (κ = CONTINUATION_COEFF), expected return{" "}
+            <code className="text-info">e = ê / p_entry</code>, and Kelly fraction{" "}
+            <code className="text-info">f* = e / b</code>, applied as fractional Kelly capped at
+            KELLY_CAP.
+          </p>
+          <p className="mt-3">
+            Settlement is <span className="amber">CLV</span> (closing-line value):{" "}
+            <code className="text-info">back: r = (p_close − p_entry)/p_entry</code>. It resolves
+            from odds alone — no match outcome required — which is what makes it a clean,
+            fast-settling skill metric. The full derivation lives in{" "}
+            <code className="text-info">lib/agent-core.mjs</code>.
+          </p>
+        </div>
+      </section>
+
+      {/* Determinism */}
+      <section className="mb-4">
+        <p className="label mb-3">determinism &amp; deployment</p>
+        <p className="max-w-2xl text-sm leading-relaxed text-muted">
+          Every function is pure: same inputs → same outputs, no wall-clock, no randomness. Run the
+          engine as a persistent worker alongside your feed (the edge lifecycle uses wall-time for
+          TTL/cooldown, so it expects a continuous, real-time stream — not a serverless
+          request/response). Score, attribute, and risk-check entirely from the returned values.
+        </p>
+      </section>
+
+      <footer className="mt-10 border-t border-ink-600 pt-5 text-xs text-faint">
+        Read the full thesis in the{" "}
+        <Link href="/litepaper" className="prompt text-amber hover:text-fg">
+          litepaper
+        </Link>
+        , or watch agents trade it live on the{" "}
+        <Link href="/desk" className="text-amber hover:text-fg">
+          desk
+        </Link>
+        .
+      </footer>
+    </div>
+  );
+}
