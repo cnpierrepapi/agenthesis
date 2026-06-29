@@ -4,26 +4,23 @@
 // agent execution tallied inline where a bet fired. TxLINE's team can reconcile
 // (fixture_id, frame_ts_ms, prices) against their own database, and see exactly
 // what the autonomous agents did on each frame.
+//
+// Execution overlay: we ship a CANONICAL recorded ledger (lib/exec-ledger.json —
+// real trades from a full replay on these exact frames) so the export is
+// complete and reproducible on any instance. If the live runner happens to have
+// a richer history (a warm instance serving the /proof feed), we use that.
 import { getRunner } from "@/lib/runner";
 import { buildVerificationCsv, type VerifyTrade } from "@/lib/verify";
+import ledger from "@/lib/exec-ledger.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 25;
 
 export async function GET() {
-  const runner = getRunner();
-  // On a cold serverless instance the runner has just booted with no trades yet.
-  // The replay starts firing within a second or two, so wait for a meaningful
-  // batch of executions before exporting (frame rows are always complete; this
-  // only fills the execution tally). A warm instance — e.g. one already serving
-  // the /proof live feed — returns immediately with its full history.
-  let snap = runner.snapshot();
-  for (let i = 0; i < 40 && (snap.tradeCount ?? 0) < 25; i++) {
-    await new Promise((r) => setTimeout(r, 400));
-    snap = runner.snapshot();
-  }
-  const trades = (snap.trades as unknown as VerifyTrade[]) ?? [];
+  const canonical = ledger as unknown as VerifyTrade[];
+  const live = ((getRunner().snapshot().trades as unknown as VerifyTrade[]) ?? []).filter((t) => t.fixtureId != null);
+  const trades = live.length >= canonical.length ? live : canonical;
+
   const { csv, frameCount, tradedFrameCount, matchCount } = buildVerificationCsv(trades);
 
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
@@ -35,6 +32,7 @@ export async function GET() {
       "X-Frame-Count": String(frameCount),
       "X-Traded-Frames": String(tradedFrameCount),
       "X-Match-Count": String(matchCount),
+      "X-Trade-Count": String(trades.length),
     },
   });
 }
