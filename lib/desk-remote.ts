@@ -126,6 +126,45 @@ export async function fetchRemoteSnapshot(): Promise<RemoteSnapshot | null> {
   }
 }
 
+export interface DeskHealth {
+  updatedAt: number; // ms epoch of the worker's last push
+  totalIngested: number;
+  tradeCount: number;
+  stalls: number;
+  mode: string;
+  status: string;
+  agentsTotal: number;
+  agentsRunning: number;
+}
+
+// Raw health read for the /desk/health page: the worker's last push + agent
+// counts. Returns null when unconfigured/unreachable or no meta row exists yet.
+export async function fetchDeskHealth(): Promise<DeskHealth | null> {
+  if (!remoteConfigured) return null;
+  try {
+    const [metaRows, agentRows] = await Promise.all([
+      get(`desk_meta?id=eq.${SESSION}&select=*`),
+      get(`desk_agents?session=eq.${SESSION}&select=id,status`),
+    ]);
+    const m = (metaRows as Record<string, unknown>[])[0];
+    if (!m) return null;
+    const agents = agentRows as Record<string, unknown>[];
+    const updated = Date.parse(String(m.updated_at));
+    return {
+      updatedAt: Number.isFinite(updated) ? updated : 0,
+      totalIngested: Number(m.total_ingested ?? 0),
+      tradeCount: Number(m.trade_count ?? 0),
+      stalls: Number(m.stalls ?? 0),
+      mode: String(m.mode ?? ""),
+      status: String(m.status ?? ""),
+      agentsTotal: agents.length,
+      agentsRunning: agents.filter((a) => a.status === "running").length,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Queue a pause/stop/resume the EC2 worker will pick up within a few seconds.
 export async function sendRemoteControl(agentId: string, op: "pause" | "resume" | "stop"): Promise<boolean> {
   if (!remoteConfigured) return false;
