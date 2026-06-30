@@ -1,9 +1,11 @@
 // AGENT RUNNER — the autonomous loop (Track C's "no human in the loop").
 //
 // On every engine edge, each running agent's policy decides independently and,
-// if it takes the edge, the runner stakes fake-USD and opens a position. A mark
-// loop revalues open positions on closing-line value and settles them after a
-// hold horizon. Nothing here waits on a human; the UI only observes.
+// if it acts on the edge, the runner records a conviction-weighted call and
+// opens a position. A mark loop revalues open calls on closing-line value and
+// grades them after a hold horizon. Nothing here waits on a human; the UI only
+// observes. (Stake/bankroll are retained internally to drive CLV but are never
+// surfaced — the product speaks in mispricings and CLV, not dollars.)
 
 import { EventEmitter } from "node:events";
 import { getFeed, type FeedHandle } from "./feed";
@@ -11,7 +13,7 @@ import { decide, markPosition, type Agent, type Position } from "./agent";
 import { getPaper, buildStrategies, DEFAULT_BASE_LEVERS, type AgentLevers } from "./papers";
 import type { EdgeKind } from "./edge/types";
 import { getProof } from "./proof";
-import { edgeProofHash } from "./frame-proof.mjs";
+import { edgeProofHash, markProofHash } from "./frame-proof.mjs";
 import type { Edge } from "./edge/types";
 
 const START_BANKROLL = 350; // universal — every agent starts equal
@@ -128,6 +130,11 @@ class AgentRunner extends EventEmitter {
       if (!res.ok || !res.accepted) continue;
 
       const now = Date.now();
+      // Timestamp of the real frame the entry price came from. The settle loop
+      // requires a frame strictly LATER than this before it will close, so the
+      // exit is always a distinct, real, post-entry observation.
+      const entryFrame = this.feed.engine.markFrameForMarket(edge.market);
+      const entryTs = entryFrame?.ts ?? now;
       const pos: Position = {
         id: `pos_${++this.seq}`,
         agentId: agent.id,
@@ -141,11 +148,13 @@ class AgentRunner extends EventEmitter {
         direction: d.direction!,
         entryProb: d.entryProb!,
         entryOdds: d.entryOdds!,
+        entryTs,
         stake: res.accepted,
         proofHash: this.proofHash(edge),
         openedAt: now,
         holdUntil: now + this.holdMs,
         markProb: d.entryProb!,
+        markTs: entryTs,
         clvReturn: 0,
         pnl: 0,
         status: "open",
@@ -157,7 +166,7 @@ class AgentRunner extends EventEmitter {
         ts: now,
         agentId: agent.id,
         agentName: agent.name,
-        text: `${agent.name} → ${pos.direction.toUpperCase()} ${pos.side} @ ${pos.entryOdds.toFixed(2)} on ${pos.matchLabel} ($${pos.stake.toFixed(0)}, ${edge.kind}·${edge.conviction}) · frame ${pos.proofHash}`,
+        text: `${agent.name} flagged ${pos.side} mispriced @ ${pos.entryOdds.toFixed(2)} on ${pos.matchLabel} (${edge.kind}·${edge.conviction}) · frame ${pos.proofHash}`,
       });
     }
   }
@@ -168,12 +177,27 @@ class AgentRunner extends EventEmitter {
     for (const agent of this.agents.values()) {
       for (const pos of agent.positions) {
         if (pos.status !== "open") continue;
-        const cur = this.feed.engine.fairProbForMarket(pos.market) ?? pos.markProb;
-        const { clvReturn, pnl } = markPosition(pos, cur);
-        pos.markProb = cur;
+
+        // The ONLY value we ever mark or settle against is a real TxLINE frame
+        // observed strictly AFTER entry. If none exists yet (illiquid market, or
+        // no re-quote since entry), we extend the hold — leaving the position open
+        // and untouched — rather than invent or carry forward an exit price. This
+        // guarantees both legs are real, distinct, verifiable observations.
+        const frame = this.feed.engine.markFrameForMarket(pos.market);
+        if (!frame || frame.ts <= pos.entryTs) continue;
+
+        const { clvReturn, pnl } = markPosition(pos, frame.prob);
+        pos.markProb = frame.prob;
+        pos.markTs = frame.ts;
         pos.clvReturn = clvReturn;
         pos.pnl = pnl;
+
         if (now >= pos.holdUntil) {
+          // Settle on this real, post-entry frame — the verifiable exit leg.
+          pos.exitProb = frame.prob;
+          pos.exitOdds = Math.round((1 / frame.prob) * 1000) / 1000;
+          pos.exitTs = frame.ts;
+          pos.exitProofHash = markProofHash(pos.market, frame.prob, pos.kind);
           pos.status = "settled";
           agent.bankroll = Math.round((agent.bankroll + pnl) * 100) / 100;
           agent.dayPnl = Math.round((agent.dayPnl + pnl) * 100) / 100;
@@ -185,7 +209,7 @@ class AgentRunner extends EventEmitter {
             agentId: agent.id,
             agentName: agent.name,
             pnl,
-            text: `${agent.name} settled ${pos.side} ${pos.direction} — CLV ${(clvReturn * 100).toFixed(1)}% → ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`,
+            text: `${agent.name} graded ${pos.side} — ${pos.entryOdds.toFixed(2)}→${pos.exitOdds.toFixed(2)} · CLV ${(clvReturn * 100).toFixed(1)}%`,
           });
         }
       }
@@ -235,6 +259,12 @@ class AgentRunner extends EventEmitter {
           odds: p.entryOdds,
           stake: p.stake,
           proofHash: p.proofHash,
+          // Exit leg — present once settled, also fingerprinted to a real frame so
+          // the closing price reconciles against TxLINE exactly like the entry.
+          exitProb: p.exitProb ?? null,
+          exitOdds: p.exitOdds ?? null,
+          exitTs: p.exitTs ?? null,
+          exitProofHash: p.exitProofHash ?? null,
           status: p.status,
           clvReturn: p.clvReturn,
           pnl: p.pnl,

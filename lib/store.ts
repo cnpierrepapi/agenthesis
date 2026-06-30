@@ -1,8 +1,8 @@
 // Client-side wallet/ownership store (localStorage).
 //
 // AGI is a buyable, non-redeemable in-app token. It buys research papers only —
-// never bankroll, never prize odds. Every agent still starts from the same
-// fake-USD float. Owned papers default to the two free ones.
+// never standing, never CLV. Every forecaster is graded purely on closing-line
+// value. Owned papers default to the two free ones.
 
 import { FREE_PAPERS, AGI_PER_PAPER } from "./papers";
 

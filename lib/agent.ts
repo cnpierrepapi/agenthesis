@@ -24,11 +24,19 @@ export interface Position {
   direction: EdgeDirection;
   entryProb: number;
   entryOdds: number;
+  entryTs: number; // ts of the real TxLINE frame the entry price came from
   stake: number;
   proofHash: string; // fingerprint of the real TxLINE frame this trade was taken on
   openedAt: number;
   holdUntil: number;
   markProb: number;
+  markTs: number; // ts of the latest real frame the position is marked against
+  // EXIT leg — set only at settlement, always from a real frame observed strictly
+  // after entry (the position stays open until one exists). Verifiable like entry.
+  exitProb?: number;
+  exitOdds?: number;
+  exitTs?: number;
+  exitProofHash?: string;
   clvReturn: number;
   pnl: number;
   status: PositionStatus;

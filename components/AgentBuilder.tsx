@@ -14,7 +14,7 @@ const KIND_LABELS: Record<EdgeKind, string> = {
 };
 
 function previewSentence(name: string, L: AgentLevers, papers: Paper[]): string {
-  const who = name.trim() || "This agent";
+  const who = name.trim() || "This forecaster";
   const verb = L.direction === "follow" ? "follows" : "fades";
   const pp = (L.minConviction * 100).toFixed(1);
   const kinds = L.edgeKinds.map((k) => KIND_LABELS[k].toLowerCase()).join(" + ") || "nothing";
@@ -24,8 +24,7 @@ function previewSentence(name: string, L: AgentLevers, papers: Paper[]): string 
       : L.phase === "inplay"
         ? `in-play${L.minMinute > 0 ? ` after ${L.minMinute}'` : ""}${L.maxMinute < 90 ? ` until ${L.maxMinute}'` : ""}`
         : "any phase";
-  const stake = L.stakeMode === "flat" ? `${(L.stakePct * 100).toFixed(0)}% flat stake` : `${L.kellyFraction.toFixed(2)}× Kelly sizing`;
-  const base = `${who} ${verb} the ${kinds} signal on its own tuning — entering above ${pp}pp, ${phase}, odds ${L.oddsMin.toFixed(2)}–${L.oddsMax.toFixed(2)}, ${stake}, max ${L.maxConcurrent} open.`;
+  const base = `${who} ${verb} the ${kinds} call on its own tuning — flagging mispricings above ${pp}pp, ${phase}, odds ${L.oddsMin.toFixed(2)}–${L.oddsMax.toFixed(2)}, max ${L.maxConcurrent} open.`;
   if (!papers.length) return base;
   const list = papers.map((p) => p.title).join("; ");
   return `${base} It also runs ${papers.length} research paper${papers.length > 1 ? "s" : ""} alongside that base: ${list}.`;
@@ -66,7 +65,7 @@ export default function AgentBuilder({ initialPaper }: { initialPaper: string | 
 
   async function deploy() {
     setError(null);
-    if (!name.trim()) return setError("name your agent");
+    if (!name.trim()) return setError("name your forecaster");
     if (!levers.edgeKinds.length && !papers.length) return setError("give it a base signal or attach a paper");
     setDeploying(true);
     try {
@@ -87,10 +86,10 @@ export default function AgentBuilder({ initialPaper }: { initialPaper: string | 
   return (
     <div className="mx-auto max-w-5xl px-5 py-8">
       <header className="mb-6">
-        <p className="label">deploy a strategy</p>
-        <h1 className="serif mt-1 text-3xl">Build an Agent</h1>
+        <p className="label">deploy a forecaster</p>
+        <h1 className="serif mt-1 text-3xl">Build a Forecaster</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
-          Every agent runs an always-on <span className="text-fg">base tuning</span> on the live book, and can run any
+          Every forecaster runs an always-on <span className="text-fg">base tuning</span> on the live book, and can run any
           number of <span className="text-fg">research papers</span> alongside it. Tune the base, then attach papers.
         </p>
       </header>
@@ -101,7 +100,7 @@ export default function AgentBuilder({ initialPaper }: { initialPaper: string | 
           <p className="label mb-3">base tuning — always on</p>
 
           <div className="mb-5">
-            <span className="label">Signals the base trades</span>
+            <span className="label">Signals the base calls</span>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {(Object.keys(KIND_LABELS) as EdgeKind[]).map((k) => {
                 const on = levers.edgeKinds.includes(k);
@@ -120,21 +119,13 @@ export default function AgentBuilder({ initialPaper }: { initialPaper: string | 
               })}
             </div>
             <p className="mt-1.5 text-xs text-faint">
-              Baseline (quote) trades the live line continuously even when no sharp move fires — proof the agent is
+              Baseline (quote) reads the live line continuously even when no sharp move fires — proof the forecaster is
               acting on real data. Steam/overreaction here run on your base tuning without a paper.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <Range label="Conviction floor" value={levers.minConviction} min={0.003} max={0.2} step={0.001} fmt={(v) => `${(v * 100).toFixed(1)}pp`} onChange={(v) => set("minConviction", v)} />
-
-            <Segment label="Sizing" value={levers.stakeMode} options={[["flat", "Flat"], ["kelly", "Kelly"]]} onChange={(v) => set("stakeMode", v as AgentLevers["stakeMode"])} />
-
-            {levers.stakeMode === "flat" ? (
-              <Range label="Stake % of bankroll" value={levers.stakePct} min={0.01} max={0.25} step={0.01} fmt={(v) => `${(v * 100).toFixed(0)}%`} onChange={(v) => set("stakePct", v)} />
-            ) : (
-              <Range label="Kelly fraction" value={levers.kellyFraction} min={0.1} max={1} step={0.05} fmt={(v) => `${v.toFixed(2)}×`} onChange={(v) => set("kellyFraction", v)} />
-            )}
 
             <Segment label="Phase" value={levers.phase} options={[["pre", "Pre"], ["inplay", "In-play"], ["both", "Both"]]} onChange={(v) => set("phase", v as AgentLevers["phase"])} />
 
@@ -188,7 +179,7 @@ export default function AgentBuilder({ initialPaper }: { initialPaper: string | 
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Name your agent…"
+            placeholder="Name your forecaster…"
             className="card flex-1 min-w-[200px] px-4 py-2.5 text-fg placeholder:text-faint"
           />
           <button
@@ -196,14 +187,14 @@ export default function AgentBuilder({ initialPaper }: { initialPaper: string | 
             disabled={deploying}
             className="rounded border border-amber-dim bg-amber/10 px-5 py-2.5 font-semibold text-amber hover:bg-amber/20 disabled:opacity-50"
           >
-            {deploying ? "Deploying…" : "Deploy agent →"}
+            {deploying ? "Deploying…" : "Deploy forecaster →"}
           </button>
         </div>
         {error && <p className="mt-2 text-sm loss">{error}</p>}
         <p className="mt-2 text-xs text-faint">
-          Deploys to the runner and starts trading immediately. Watch it on the{" "}
+          Deploys to the runner and starts forecasting immediately. Watch it on the{" "}
           <Link href="/desk" className="amber hover:text-fg">
-            Desk
+            Signal Desk
           </Link>
           .
         </p>

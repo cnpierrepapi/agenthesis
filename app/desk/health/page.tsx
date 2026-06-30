@@ -64,7 +64,7 @@ function computeVerdict(now: number, h: DeskHealth | null, ratePerMin: number | 
     return {
       level: "idle",
       title: "No live match window — worker healthy",
-      detail: `Idle outside match windows. Lifetime: ${h.totalIngested.toLocaleString()} frames, ${h.tradeCount} trades, ${h.stalls} stall cycles.`,
+      detail: `Idle outside match windows. Lifetime: ${h.totalIngested.toLocaleString()} frames, ${h.tradeCount} calls, ${h.stalls} stall cycles.`,
     };
   }
 
@@ -76,7 +76,7 @@ function computeVerdict(now: number, h: DeskHealth | null, ratePerMin: number | 
     return {
       level: "ok",
       title: `LIVE — ingesting ${inWindow.label}`,
-      detail: `${ratePerMin.toFixed(0)} frames/min · ${h.totalIngested.toLocaleString()} frames total · ${h.tradeCount} trades · ${h.agentsRunning}/${h.agentsTotal} agents running. Healthy.`,
+      detail: `${ratePerMin.toFixed(0)} frames/min · ${h.totalIngested.toLocaleString()} frames total · ${h.tradeCount} calls · ${h.agentsRunning}/${h.agentsTotal} agents running. Healthy.`,
     };
 
   if (sinceKick < 3 * 60_000)
@@ -170,7 +170,7 @@ export default function DeskHealth() {
             <Fact label="last push" value={ageS == null ? "—" : `${ageS}s ago`} tone={ageS != null && ageS < 60 ? "gain" : "loss"} />
             <Fact label="ingest rate" value={rate == null ? "measuring…" : `${rate.toFixed(0)}/min`} tone={rate && rate > 0 ? "gain" : undefined} />
             <Fact label="frames ingested" value={health ? health.totalIngested.toLocaleString() : "—"} />
-            <Fact label="trades" value={health ? String(health.tradeCount) : "—"} />
+            <Fact label="calls" value={health ? String(health.tradeCount) : "—"} />
             <Fact label="stall cycles" value={health ? String(health.stalls) : "—"} />
             <Fact label="agents running" value={health ? `${health.agentsRunning}/${health.agentsTotal}` : "—"} />
           </div>

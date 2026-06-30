@@ -30,6 +30,8 @@ interface Trade {
   odds: number;
   stake: number;
   proofHash: string;
+  exitOdds: number | null;
+  exitProofHash: string | null;
   status: string;
   clvReturn: number;
   pnl: number;
@@ -46,9 +48,6 @@ interface Snapshot {
 
 function clock(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour12: false });
-}
-function money(n: number): string {
-  return `${n < 0 ? "−" : ""}$${Math.abs(n).toFixed(2)}`;
 }
 function sourceLabel(mode?: string): string {
   if (mode === "replay") return "TxLINE captured matches (replayed)";
@@ -80,7 +79,7 @@ export default function ProofBoard() {
   const trades = snap?.trades ?? [];
   const prov = snap?.provenance ?? [];
   const settled = trades.filter((t) => t.status === "settled");
-  const netPnl = settled.reduce((s, t) => s + t.pnl, 0);
+  const avgClv = settled.length ? settled.reduce((s, t) => s + t.clvReturn, 0) / settled.length : 0;
   // The total real TxLINE data we have on hand (captured + bundled), as opposed
   // to `totalIngested` which is the live running count this session.
   const capturedFrames = prov.reduce((s, m) => s + m.oddsFrames + m.scoreFrames, 0);
@@ -89,11 +88,11 @@ export default function ProofBoard() {
     <div className="mx-auto max-w-6xl px-5 py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="label">audit trail</p>
-          <h1 className="serif mt-1 text-3xl">Proof &amp; Evidence</h1>
+          <p className="label">verification</p>
+          <h1 className="serif mt-1 text-3xl">Verification</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted">
-            Every signal below was computed from real TxLINE market data, and every trade is fingerprinted to the exact
-            frame it was taken on. This is the full record — the data ingested, and what the agents did with it.
+            Every signal below was computed from real TxLINE market data, and every call is fingerprinted to the exact
+            frame it was taken on. This is the full record — the data ingested, and what the forecasters did with it.
           </p>
         </div>
         <span className="flex items-center gap-2 text-xs text-faint">
@@ -108,8 +107,8 @@ export default function ProofBoard() {
         <Stat label="matches captured" value={prov.length.toLocaleString()} />
         <Stat label="real frames pulled" value={capturedFrames.toLocaleString()} />
         <Stat label="frames ingested" value={(snap?.totalIngested ?? 0).toLocaleString()} />
-        <Stat label="total trades" value={(snap?.tradeCount ?? 0).toLocaleString()} />
-        <Stat label="net settled p&l" value={money(netPnl)} tone={netPnl >= 0 ? "gain" : "loss"} />
+        <Stat label="total calls" value={(snap?.tradeCount ?? 0).toLocaleString()} />
+        <Stat label="avg settled clv" value={`${(avgClv * 100).toFixed(1)}%`} tone={avgClv >= 0 ? "gain" : "loss"} />
       </div>
 
       {/* VERIFY-AGAINST-YOUR-DB — the CSV download */}
@@ -117,15 +116,18 @@ export default function ProofBoard() {
         <div className="max-w-2xl">
           <p className="label mb-1">reconcile against your database</p>
           <p className="text-sm text-muted">
-            Download every real TxLINE frame we ingested — original timestamp, market, and demargined prices — with the
-            agents&apos; execution tallied inline on the frames they traded. Join on{" "}
+            Download every real TxLINE frame we ingested — original timestamp, market, and demargined prices — with each
+            forecaster&apos;s calls tallied inline on the frames they fired on. Join on{" "}
             <code className="rounded border border-ink-600 bg-ink-800 px-1 text-xs text-fg">fixture_id</code> +{" "}
             <code className="rounded border border-ink-600 bg-ink-800 px-1 text-xs text-fg">frame_ts_ms</code> to confirm
-            our prices match yours, and see exactly what each agent did on that frame.
+            our prices match yours, and see exactly what each forecaster called on that frame. Every settled call carries{" "}
+            <span className="text-fg">both legs</span> — entry and closing fair prob, each fingerprinted to a real frame —
+            so the CLV is recomputable from your own data (
+            <code className="rounded border border-ink-600 bg-ink-800 px-1 text-xs text-fg">clv_recomputed_pct</code>).
           </p>
           <p className="mt-1 text-xs text-faint">
             {capturedFrames.toLocaleString()} frames · {prov.length} matches · {(snap?.tradeCount ?? 0).toLocaleString()}{" "}
-            agent trades fingerprinted to their source frame.
+            forecaster calls fingerprinted to their source frame.
           </p>
         </div>
         <a
@@ -207,30 +209,29 @@ export default function ProofBoard() {
       {/* THE TRADE LEDGER */}
       <section className="mt-6">
         <div className="mb-3 flex items-end justify-between">
-          <p className="label">trade ledger — every bet, tied to a frame</p>
+          <p className="label">signal ledger — every call, tied to a frame</p>
           <p className="text-xs text-faint">{trades.length} most recent</p>
         </div>
         <div className="panel overflow-x-auto">
-          <table className="w-full min-w-[820px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-ink-600 text-xs text-faint">
                 <Th>time</Th>
                 <Th>agent</Th>
                 <Th>signal</Th>
                 <Th>match · market</Th>
-                <Th>bet</Th>
-                <Th right>odds</Th>
-                <Th right>stake</Th>
+                <Th>call</Th>
+                <Th right>entry</Th>
+                <Th right>close</Th>
                 <Th>frame</Th>
                 <Th right>clv</Th>
-                <Th right>p&l</Th>
               </tr>
             </thead>
             <tbody className="font-mono text-xs">
               {trades.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-faint">
-                    waiting for the first trade…
+                  <td colSpan={9} className="px-3 py-6 text-center text-faint">
+                    waiting for the first call…
                   </td>
                 </tr>
               )}
@@ -246,21 +247,20 @@ export default function ProofBoard() {
                     <span className={t.direction === "back" ? "gain" : "loss"}>{t.direction}</span> {t.side}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{t.odds.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">${t.stake.toFixed(0)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {t.exitOdds != null ? (
+                      <span title={`closing frame ⛓ ${t.exitProofHash ?? ""}`}>{t.exitOdds.toFixed(2)}</span>
+                    ) : (
+                      <span className="text-faint">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
-                    <span className="amber" title="fingerprint of the real TxLINE frame this trade was taken on">
+                    <span className="amber" title="fingerprint of the real TxLINE frame this call was taken on">
                       ⛓ {t.proofHash}
                     </span>
                   </td>
                   <td className={`px-3 py-2 text-right tabular-nums ${t.clvReturn >= 0 ? "gain" : "loss"}`}>
-                    {t.status === "settled" ? `${(t.clvReturn * 100).toFixed(1)}%` : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {t.status === "settled" ? (
-                      <span className={t.pnl >= 0 ? "gain" : "loss"}>{money(t.pnl)}</span>
-                    ) : (
-                      <span className="text-faint">open</span>
-                    )}
+                    {t.status === "settled" ? `${(t.clvReturn * 100).toFixed(1)}%` : <span className="text-faint">open</span>}
                   </td>
                 </tr>
               ))}
@@ -270,11 +270,11 @@ export default function ProofBoard() {
         <p className="mt-3 text-xs text-faint">
           Watch them fire in real time on the{" "}
           <Link href="/desk" className="amber hover:text-fg">
-            Desk
+            Signal Desk
           </Link>{" "}
           · standings on the{" "}
           <Link href="/leaderboard" className="amber hover:text-fg">
-            Leaderboard
+            Calibration Tournament
           </Link>
           .
         </p>

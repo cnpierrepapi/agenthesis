@@ -7,7 +7,7 @@ const SECTIONS = [
   ["04", "The data layer: TxLINE"],
   ["05", "The edge engine"],
   ["06", "The decision core and CLV"],
-  ["07", "Agents and the build loop"],
+  ["07", "Forecasters and the build loop"],
   ["08", "Proof and verifiability"],
   ["09", "The economy"],
   ["10", "The SDK"],
@@ -43,11 +43,11 @@ export default function Litepaper() {
       <header className="mb-10 border-b border-ink-600 pb-8">
         <p className="label">litepaper · v0.1</p>
         <h1 className="serif mt-2 text-4xl leading-tight text-paper">
-          Agenthesis: strategies from research, traded by autonomous agents
+          Agenthesis: strategies from research, run by autonomous forecasters
         </h1>
         <p className="mt-4 text-sm leading-relaxed text-muted">
-          A platform where every trading strategy is a published market-inefficiency result, every
-          agent runs that strategy with no human in the loop, and every decision is graded on
+          A platform where every strategy is a published market-inefficiency result, every forecaster runs
+          that strategy with no human in the loop to flag mispriced markets, and every call is graded on
           closing-line value over a verifiable, on-chain-anchored data feed.
         </p>
         <div className="mt-5 flex flex-wrap gap-3 text-sm">
@@ -86,13 +86,13 @@ export default function Litepaper() {
         <p>
           Sports and event betting is the largest unstructured prediction market on earth, yet it is
           treated as gambling rather than as a quantitative discipline. The reason is that outcomes
-          are noisy: a good bet can lose and a bad bet can win, so over any human-scale sample,
+          are noisy: a good call can lose and a bad call can win, so over any human-scale sample,
           skill is statistically indistinguishable from luck. Agenthesis reframes the activity. We
           take published results about market inefficiencies, render each one as a runnable strategy,
-          let autonomous agents trade them over a live, de-margined price feed, and grade every
-          decision on <span className="amber">closing-line value</span> rather than on whether the
-          bet won. CLV settles from odds alone, which makes skill measurable on every single
-          decision instead of once per outcome.
+          let autonomous forecasters flag the resulting mispricings over a live, de-margined price
+          feed, and grade every call on <span className="amber">closing-line value</span> rather than
+          on whether a bet won. CLV settles from odds alone, which makes skill measurable on every
+          single call instead of once per outcome.
         </p>
       </Section>
 
@@ -100,11 +100,11 @@ export default function Litepaper() {
         <p>
           The bookmaker&apos;s margin and the variance of outcomes do two things at once. The margin
           guarantees that the median participant loses, and the variance guarantees that the few who
-          win cannot prove they did so on purpose. A bettor who is genuinely 3% sharper than the
-          closing line will still spend long stretches underwater. Conventional platforms reward the
-          appearance of winning — the lucky streak, the parlay screenshot — and have no instrument
-          for the thing that actually compounds: consistently beating the price the market settles
-          at.
+          win cannot prove they did so on purpose. A forecaster who is genuinely 3% sharper than the
+          closing line will still spend long stretches underwater on outcome P&amp;L. Conventional
+          platforms reward the appearance of winning — the lucky streak, the parlay screenshot — and
+          have no instrument for the thing that actually compounds: consistently beating the price the
+          market settles at.
         </p>
         <p>
           If you cannot measure skill cleanly, you cannot teach it, rank it, or build a market around
@@ -118,21 +118,21 @@ export default function Litepaper() {
           A paper maps to one <em className="text-fg">edge kind</em> in the engine plus a calibrated
           set of default levers — the parameter variant, which is the edge conditioned on a specific
           match context. Steam-chasing, post-event overreaction, and micro-drift quoting each
-          correspond to a documented effect with an entry rule, a sizing rule, and a settlement rule.
+          correspond to a documented effect with an entry rule, a conviction rule, and a settlement rule.
         </p>
         <p>
           This makes strategy legible. You do not deploy a black box; you deploy a citation. The{" "}
           <Link href="/papers" className="text-amber hover:text-fg">
             research library
           </Link>{" "}
-          is the strategy menu, and an agent&apos;s behaviour is fully explained by the papers it
+          is the strategy menu, and a forecaster&apos;s behaviour is fully explained by the papers it
           carries and the levers it was tuned with.
         </p>
       </Section>
 
       <Section id="s04" num="04" title="The data layer: TxLINE">
         <p>
-          Agents trade over TxLINE, the World Cup data layer, which publishes a{" "}
+          Forecasters read TxLINE, the World Cup data layer, which publishes a{" "}
           <span className="text-fg">de-margined (no-vig) book</span>. Because the vig is removed,
           each side&apos;s price is a clean implied probability: for a side priced{" "}
           <code className="text-info">price</code>, the fair probability is{" "}
@@ -163,65 +163,67 @@ export default function Litepaper() {
             that the market corrects.
           </li>
           <li>
-            <span className="amber">quote</span> — a micro-drift baseline that keeps an agent active
-            between the louder signals.
+            <span className="amber">quote</span> — a micro-drift baseline that keeps a forecaster
+            active between the louder signals.
           </li>
         </ul>
         <p>
           Each edge carries a magnitude in probability units and a conviction score. The engine is an
           event emitter with tunable thresholds and windows; downstream, nothing needs to know how an
-          edge was found, only what it is worth.
+          edge was found, only what mispricing it implies.
         </p>
       </Section>
 
       <Section id="s06" num="06" title="The decision core and CLV">
         <p>
-          The decision core is a pure mapping from an edge plus a lever set to a sized bet. An edge of
+          The decision core is a pure mapping from an edge plus a lever set to a sized call. An edge of
           magnitude <em className="text-fg">m</em> implies an expected captured move{" "}
           <code className="text-info">ê = κ·m</code>, an expected return{" "}
           <code className="text-info">e = ê / p_entry</code>, and a Kelly fraction{" "}
           <code className="text-info">f* = e / b</code> applied as fractional Kelly and capped, so no
-          single bet can over-concentrate the bankroll.
+          single call can over-concentrate the book.
         </p>
         <p>
           Settlement is closing-line value:{" "}
           <code className="text-info">back: r = (p_close − p_entry) / p_entry</code>. CLV measures
-          whether you entered at a better price than the market closed at. Critically, it{" "}
-          <span className="text-fg">resolves from odds alone</span> — the match outcome is never
-          needed — so every decision is graded immediately and the skill signal is not buried under
+          whether the forecaster flagged a price better than the one the market closed at. Critically,
+          it <span className="text-fg">resolves from odds alone</span> — the match outcome is never
+          needed — so every call is graded immediately and the skill signal is not buried under
           win/loss variance. This is the heart of the platform: a fast-settling, low-variance metric
           for being right about price.
         </p>
       </Section>
 
-      <Section id="s07" num="07" title="Agents and the build loop">
+      <Section id="s07" num="07" title="Forecasters and the build loop">
         <p>
-          An agent is a bankroll plus an ordered list of strategies. It runs its base tuning plus one
-          lever set per attached paper; for each incoming edge, the first strategy that greenlights it
-          takes the bet. There is no agent-versus-agent mechanic and no human override mid-match — the
-          agent trades the live stream autonomously and its track record is entirely its own.
+          A forecaster is a conviction policy plus an ordered list of strategies. It runs its base
+          tuning plus one lever set per attached paper; for each incoming edge, the first strategy that
+          greenlights it makes the call. There is no forecaster-versus-forecaster mechanic and no human
+          override mid-match — the forecaster reads the live stream autonomously, flags mispricings, and
+          its track record is entirely its own.
         </p>
         <p>
           In the{" "}
           <Link href="/build" className="text-amber hover:text-fg">
             builder
           </Link>{" "}
-          you pick a paper, tune its levers (conviction, stake mode, Kelly fraction, phase, minute
-          gates, odds band, concurrency, follow-or-fade), and deploy to the runner. The{" "}
+          you pick a paper, tune its levers (conviction, phase, minute gates, odds band, concurrency,
+          follow-or-fade), and deploy to the runner. The{" "}
           <Link href="/leaderboard" className="text-amber hover:text-fg">
-            leaderboard
+            calibration tournament
           </Link>{" "}
-          ranks agents on realized performance.
+          ranks forecasters on closing-line value.
         </p>
       </Section>
 
       <Section id="s08" num="08" title="Proof and verifiability">
         <p>
-          Trust in a trading claim comes from being able to check it. Agenthesis exposes a one-page{" "}
+          Trust in a forecasting claim comes from being able to check it. Agenthesis exposes a
+          one-page{" "}
           <Link href="/proof" className="text-amber hover:text-fg">
-            audit trail
+            verification trail
           </Link>{" "}
-          with the full execution ledger — 300 trades across ten matches — where each trade carries a{" "}
+          with the full signal ledger — 300 calls across ten matches — where each call carries a{" "}
           <code className="text-info">proofHash</code> tying it to the exact feed frame it was taken
           on.
         </p>
@@ -229,25 +231,25 @@ export default function Litepaper() {
           The Solana touchpoint is <span className="text-fg">proof of access</span>: a real on-chain
           subscribe transaction, signed with a wallet, mints the right to the TxLINE stream. That
           signature is a public, verifiable hash anyone can open on Solana Explorer, anchoring the
-          claim that the data the agents trade comes from the genuine, authorized feed rather than a
-          fabricated one.
+          claim that the data the forecasters read comes from the genuine, authorized feed rather than
+          a fabricated one.
         </p>
       </Section>
 
       <Section id="s09" num="09" title="The economy">
         <p>
-          Every agent starts from the same fake-USD float, so the leaderboard measures strategy, not
-          deposit size. <span className="amber">AGI</span> is the in-app token. It buys one thing —
-          access to more research papers (roughly 1,000 AGI per paper). It is explicitly{" "}
-          <span className="text-fg">never bankroll and never prize odds</span>: you cannot pay to
-          trade bigger or to improve your standing. AGI buys knowledge; performance is earned on the
+          <span className="amber">AGI</span> is the in-app token. It buys one thing — access to more
+          research papers (roughly 1,000 AGI per paper). It is explicitly{" "}
+          <span className="text-fg">never standing and never CLV</span>: you cannot pay to climb the
+          tournament or to make your calls score better. AGI buys knowledge; rank is earned on the
           feed.
         </p>
         <p>
-          Rewards run on an operator-funded model: a daily pool (USDC plus AGI) is posted by the
-          operator and split across the competing agents by skill. The platform never sells bankroll
-          and never sells a share of the pool — the separation between what is purchasable (research)
-          and what is earned (standing and rewards) is the integrity guarantee.
+          There is no wagering, no bankroll to top up, and no prize pool to buy into. Every forecaster
+          is graded on the same metric — closing-line value — so the only thing that moves you up the
+          Calibration Tournament is being right about price, sooner than the market. The separation
+          between what is purchasable (research) and what is earned (calibration) is the integrity
+          guarantee.
         </p>
       </Section>
 
@@ -255,9 +257,9 @@ export default function Litepaper() {
         <p>
           The quantitative layer is published as an embeddable SDK for desks that want to run the
           engine in their own stack. You bring your own feed and your own execution; the SDK turns the
-          de-margined book into typed, scored edges and grades every decision on CLV. It is the exact
+          de-margined book into typed, scored signals and grades every call on CLV. It is the exact
           pure, deterministic, unit-tested code the product runs — no I/O, no clock reads, no hidden
-          state — which is what makes it safe to place next to real money.
+          state — which is what makes it safe to place next to real execution.
         </p>
         <p>
           Read the integration guide and copy the quickstart on the{" "}
@@ -270,12 +272,12 @@ export default function Litepaper() {
 
       <Section id="s11" num="11" title="Roadmap">
         <ul className="ml-1 space-y-2">
-          <li>Expand the paper catalog and let agents carry deeper multi-paper stacks.</li>
+          <li>Expand the paper catalog and let forecasters carry deeper multi-paper stacks.</li>
           <li>
-            Live, persistent agents on a continuous TxLINE worker beyond the captured-replay demo.
+            Live, persistent forecasters on a continuous TxLINE worker beyond the captured-replay demo.
           </li>
           <li>
-            Richer on-chain settlement: per-trade proofs anchored to the feed&apos;s Merkle roots.
+            Richer on-chain settlement: per-call proofs anchored to the feed&apos;s Merkle roots.
           </li>
           <li>A skill profile per operator: CLV distribution, calibration, and persistence.</li>
         </ul>
@@ -284,16 +286,16 @@ export default function Litepaper() {
       <Section id="s12" num="12" title="Responsible play">
         <p>
           Agenthesis is a research and skill-measurement platform built on captured and de-margined
-          data. Agents trade a fake-USD float; the token buys research, not betting power. CLV is a
-          measure of pricing skill, not a promise of profit, and past performance over a replay does
-          not guarantee future results on a live book. Nothing here is financial advice.
+          data. Forecasters never wager; the token buys research, not standing. CLV is a measure of
+          pricing skill, not a promise of profit, and past calibration over a replay does not guarantee
+          future results on a live book. Nothing here is financial advice.
         </p>
       </Section>
 
       <footer className="mt-6 border-t border-ink-600 pt-6 text-xs text-faint">
         Agenthesis · built on the TxLINE World Cup data layer ·{" "}
         <Link href="/desk" className="text-amber hover:text-fg">
-          watch it trade live →
+          watch forecasters run it live →
         </Link>
       </footer>
     </div>

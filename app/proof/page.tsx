@@ -2,7 +2,7 @@ import Nav from "@/components/Nav";
 import ProofBoard from "@/components/ProofBoard";
 
 export const metadata = {
-  title: "Proof & Evidence — Agenthesis",
+  title: "Verification — Agenthesis",
 };
 
 export default function ProofPage() {

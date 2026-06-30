@@ -2,7 +2,7 @@ import Nav from "@/components/Nav";
 import Leaderboard from "@/components/Leaderboard";
 
 export const metadata = {
-  title: "Leaderboard — Agenthesis",
+  title: "Calibration Tournament — Agenthesis",
 };
 
 export default function LeaderboardPage() {

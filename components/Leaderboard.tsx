@@ -8,23 +8,20 @@ interface AgentView {
   title: string;
   edgeKinds: string[];
   status: string;
-  bankroll: number;
-  dayPnl: number;
+  bets: number;
   wins: number;
   losses: number;
 }
 
-// Today's reward pool (operator-funded, illustrative). Split across competing
-// agents in proportion to positive P&L — losers earn no share, never negative.
-const POOL_USDC = 500;
-const POOL_AGI = 50_000;
-
-function money(n: number): string {
-  return `${n < 0 ? "−" : ""}$${Math.abs(n).toFixed(2)}`;
+interface TradeRow {
+  agentId: string;
+  status: string;
+  clvReturn: number;
 }
 
 export default function Leaderboard() {
   const [agents, setAgents] = useState<AgentView[]>([]);
+  const [trades, setTrades] = useState<TradeRow[]>([]);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -35,6 +32,7 @@ export default function Leaderboard() {
       try {
         const s = JSON.parse((e as MessageEvent).data);
         setAgents(s.agents ?? []);
+        setTrades(s.trades ?? []);
       } catch {
         /* ignore */
       }
@@ -42,15 +40,29 @@ export default function Leaderboard() {
     return () => es.close();
   }, []);
 
+  // Rank on closing-line value, the only honest skill metric here: average CLV
+  // captured per settled call, with hit-rate (share of calls the line moved
+  // toward) and sample size as tie-breakers. No P&L, no reward pool — a
+  // calibration tournament, not a casino.
   const ranked = useMemo(() => {
-    const totalPos = agents.reduce((s, a) => s + Math.max(0, a.dayPnl), 0);
+    const clv = new Map<string, { sum: number; n: number }>();
+    for (const t of trades) {
+      if (t.status !== "settled") continue;
+      const e = clv.get(t.agentId) ?? { sum: 0, n: 0 };
+      e.sum += t.clvReturn;
+      e.n += 1;
+      clv.set(t.agentId, e);
+    }
     return [...agents]
-      .sort((a, b) => b.dayPnl - a.dayPnl)
       .map((a) => {
-        const share = totalPos > 0 ? Math.max(0, a.dayPnl) / totalPos : 0;
-        return { ...a, share, usdc: POOL_USDC * share, agi: POOL_AGI * share };
-      });
-  }, [agents]);
+        const c = clv.get(a.id);
+        const avgClv = c && c.n ? c.sum / c.n : 0;
+        const settledN = a.wins + a.losses;
+        const hitRate = settledN ? a.wins / settledN : 0;
+        return { ...a, avgClv, hitRate, sampleN: c?.n ?? settledN };
+      })
+      .sort((a, b) => b.avgClv - a.avgClv || b.hitRate - a.hitRate || b.sampleN - a.sampleN);
+  }, [agents, trades]);
 
   const podium = ranked.slice(0, 3);
 
@@ -58,11 +70,12 @@ export default function Leaderboard() {
     <div className="mx-auto max-w-5xl px-5 py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="label">daily standings</p>
-          <h1 className="serif mt-1 text-3xl">Leaderboard</h1>
+          <p className="label">calibration tournament</p>
+          <h1 className="serif mt-1 text-3xl">Calibration Tournament</h1>
           <p className="mt-2 max-w-xl text-sm text-muted">
-            Today&apos;s reward pool: <span className="amber">${POOL_USDC} USDC + {POOL_AGI.toLocaleString()} AGI</span>,
-            split across competing agents by P&amp;L share. Operator-funded — losing agents earn no share.
+            Forecasters ranked by <span className="amber">closing-line value</span> — average CLV captured per
+            call, with hit-rate and sample size. CLV resolves from odds alone, so skill is graded on every call,
+            not once per match.
           </p>
         </div>
         <span className="flex items-center gap-2 text-xs text-faint">
@@ -82,12 +95,14 @@ export default function Leaderboard() {
             return (
               <div key={a.id} className="flex w-28 flex-col items-center sm:w-36">
                 <p className={`serif truncate text-center text-sm ${first ? "text-paper" : "text-muted"}`}>{a.name}</p>
-                <p className={`tabular-nums text-sm ${a.dayPnl >= 0 ? "gain" : "loss"}`}>{money(a.dayPnl)}</p>
+                <p className={`tabular-nums text-sm ${a.avgClv >= 0 ? "gain" : "loss"}`}>
+                  {a.sampleN ? `${(a.avgClv * 100).toFixed(1)}%` : "—"}
+                </p>
                 <div className={`mt-2 flex w-full ${h} flex-col items-center justify-start rounded-t-lg border-t border-x ${first ? "border-amber-dim bg-amber/10" : "border-ink-600 bg-ink-700"} pt-3`}>
                   <span className={`font-mono text-2xl font-bold ${first ? "amber" : "text-muted"}`}>{place}</span>
-                  {a.share > 0 && (
+                  {a.sampleN > 0 && (
                     <span className="mt-1 px-1 text-center text-[10px] text-faint">
-                      ${a.usdc.toFixed(0)} + {Math.round(a.agi).toLocaleString()} AGI
+                      {(a.hitRate * 100).toFixed(0)}% hit · {a.sampleN} calls
                     </span>
                   )}
                 </div>
@@ -99,41 +114,33 @@ export default function Leaderboard() {
 
       {/* full table */}
       <div className="panel overflow-hidden">
-        <div className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-b border-ink-600 px-4 py-2.5 text-xs sm:grid-cols-[2rem_1.4fr_1fr_auto_auto_auto]">
+        <div className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-b border-ink-600 px-4 py-2.5 text-xs sm:grid-cols-[2rem_1.4fr_1fr_auto_auto]">
           <span className="label">#</span>
-          <span className="label">agent</span>
-          <span className="label hidden sm:block">day p&l</span>
-          <span className="label hidden text-right sm:block">w/l</span>
-          <span className="label hidden text-right sm:block">bankroll</span>
-          <span className="label text-right">reward</span>
+          <span className="label">forecaster</span>
+          <span className="label hidden sm:block">avg clv</span>
+          <span className="label hidden text-right sm:block">hit-rate</span>
+          <span className="label text-right">calls</span>
         </div>
-        {ranked.length === 0 && <p className="px-4 py-6 text-sm text-faint">waiting for agents…</p>}
+        {ranked.length === 0 && <p className="px-4 py-6 text-sm text-faint">waiting for forecasters…</p>}
         {ranked.map((a, i) => (
           <div
             key={a.id}
-            className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-b border-ink-600 px-4 py-3 last:border-0 sm:grid-cols-[2rem_1.4fr_1fr_auto_auto_auto]"
+            className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 border-b border-ink-600 px-4 py-3 last:border-0 sm:grid-cols-[2rem_1.4fr_1fr_auto_auto]"
           >
             <span className={`font-mono ${i === 0 ? "amber" : "text-faint"}`}>{i + 1}</span>
             <div className="min-w-0">
               <p className="truncate font-semibold">{a.name}</p>
               <p className="truncate text-xs text-faint">
-                {(a.edgeKinds ?? []).join("·")} · {a.wins}W/{a.losses}L
+                {(a.edgeKinds ?? []).join("·")} · {a.wins} hit/{a.losses} miss
               </p>
             </div>
-            <span className={`hidden tabular-nums sm:block ${a.dayPnl >= 0 ? "gain" : "loss"}`}>{money(a.dayPnl)}</span>
+            <span className={`hidden tabular-nums sm:block ${a.avgClv >= 0 ? "gain" : "loss"}`}>
+              {a.sampleN ? `${(a.avgClv * 100).toFixed(1)}%` : "—"}
+            </span>
             <span className="hidden text-right text-sm text-muted tabular-nums sm:block">
-              {a.wins}/{a.losses}
+              {a.wins + a.losses ? `${(a.hitRate * 100).toFixed(0)}%` : "—"}
             </span>
-            <span className="hidden text-right text-sm tabular-nums sm:block">${a.bankroll.toFixed(2)}</span>
-            <span className="text-right text-sm tabular-nums">
-              {a.share > 0 ? (
-                <span className="amber">
-                  ${a.usdc.toFixed(0)} <span className="text-faint">+{Math.round(a.agi).toLocaleString()}</span>
-                </span>
-              ) : (
-                <span className="text-faint">—</span>
-              )}
-            </span>
+            <span className="text-right text-sm tabular-nums text-muted">{a.bets}</span>
           </div>
         ))}
       </div>

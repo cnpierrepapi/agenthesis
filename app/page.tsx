@@ -6,9 +6,9 @@ import { PAPERS } from "@/lib/papers";
 
 const STEPS = [
   { n: "01", t: "Pick a paper", d: "Each strategy is a published market-inefficiency result. Two are free; the rest unlock with AGI." },
-  { n: "02", t: "Tune & deploy", d: "Set conviction, sizing, phase, odds band and direction. Deploy an agent in one click." },
-  { n: "03", t: "It trades solo", d: "The agent ingests the live feed and places fake-USD bets autonomously — no human in the loop." },
-  { n: "04", t: "Settled on CLV", d: "Positions resolve on closing-line value. The on-chain record can't be cherry-picked." },
+  { n: "02", t: "Tune & deploy", d: "Set conviction, phase, odds band and direction. Deploy a forecaster in one click." },
+  { n: "03", t: "It calls solo", d: "The forecaster ingests the live feed and flags mispriced markets autonomously — no human in the loop." },
+  { n: "04", t: "Graded on CLV", d: "Calls are scored on closing-line value — did the market move toward the call. The on-chain record can't be cherry-picked." },
 ];
 
 export default function Home() {
@@ -23,22 +23,23 @@ export default function Home() {
       <section className="mx-auto max-w-7xl px-5 py-14">
         <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
           <div>
-            <p className="label">research desk · autonomous agents</p>
+            <p className="label">research desk · autonomous forecasters</p>
             <h1 className="serif mt-4 text-5xl leading-[1.05] sm:text-6xl">
-              Strategies from research.
+              Detect the mispricing.
               <br />
-              Agents that trade them.
+              Beat the closing line.
             </h1>
             <p className="mt-5 max-w-lg text-muted">
-              Spawn autonomous betting agents whose strategy <em>is</em> a research paper.
-              They ingest the live World Cup feed and trade with no human in the loop.
+              Spawn autonomous forecasters whose strategy <em>is</em> a research paper.
+              They read the live World Cup odds feed, flag mispriced markets, and are graded
+              on closing-line value — no human in the loop.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/desk"
                 className="rounded border border-amber-dim bg-amber/10 px-5 py-2.5 font-semibold text-amber hover:bg-amber/20"
               >
-                Open the Desk →
+                Open the Signal Desk →
               </Link>
               <Link
                 href="/papers"
@@ -75,7 +76,7 @@ export default function Home() {
             <p className="label">the edges</p>
             <h2 className="serif mt-2 text-2xl text-paper">Steam and overreaction, from the literature.</h2>
             <p className="mt-2 text-sm text-muted">
-              Back the sharp money when the no-vig line moves; fade the overshoot after a goal or red card.
+              Follow the sharp money when the no-vig line moves; fade the overshoot after a goal or red card.
               {" "}
               {PAPERS.length} papers · {freeCount} free.
             </p>
@@ -92,7 +93,7 @@ export default function Home() {
           <p className="label">provenance</p>
           <h2 className="serif mt-2 text-2xl text-paper">Every signal from an on-chain-anchored feed.</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted">
-            Agents trade TxLINE&apos;s World Cup data layer — odds and scores cryptographically anchored on Solana.
+            Forecasters read TxLINE&apos;s World Cup data layer — odds and scores cryptographically anchored on Solana.
             Access is minted by a real on-chain transaction, so the data&apos;s provenance is publicly verifiable.
           </p>
           {proof.signedOnSolana ? (

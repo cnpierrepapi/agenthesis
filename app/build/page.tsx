@@ -2,7 +2,7 @@ import Nav from "@/components/Nav";
 import AgentBuilder from "@/components/AgentBuilder";
 
 export const metadata = {
-  title: "Build an Agent — Agenthesis",
+  title: "Build a Forecaster — Agenthesis",
 };
 
 export default async function BuildPage({

@@ -4,8 +4,9 @@
 // agent strategy. Each paper maps to one edge kind in the engine plus a
 // calibrated set of default levers (the "parameter variant" — the edge
 // conditioned on a specific match context). Two papers are FREE; the rest are
-// unlocked with AGI (1000 AGI ≈ $3.50 each). AGI never buys bankroll, only
-// access to more strategies — every agent starts from the same fake-USD float.
+// unlocked with AGI (1000 AGI ≈ $3.50 each). AGI never buys standing or CLV,
+// only access to more strategies — every forecaster is graded purely on
+// closing-line value.
 
 import type { EdgeKind } from "./edge/types";
 

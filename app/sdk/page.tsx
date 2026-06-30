@@ -4,7 +4,7 @@ import SdkDoc from "@/components/SdkDoc";
 export const metadata = {
   title: "SDK — Agenthesis",
   description:
-    "Embed the Agenthesis edge engine and CLV decision core in your own desk. The exact pure, deterministic code the product runs.",
+    "Embed the Agenthesis mispricing-detection engine and CLV decision core in your own stack. The exact pure, deterministic code the product runs.",
 };
 
 export default function SdkPage() {

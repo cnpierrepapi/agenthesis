@@ -19,7 +19,7 @@ const PRIMITIVES = [
   {
     kind: "Decision",
     fn: "decide(agent, edge, ctx)",
-    body: "Pure mapping from an edge + your lever set → a sized bet (take / side / direction / stake). Flat or fractional-Kelly.",
+    body: "Pure mapping from an edge + your lever set → a sized call (take / side / direction / stake). Flat or fractional-Kelly.",
   },
   {
     kind: "Scoring",
@@ -140,7 +140,7 @@ engine.ingestScores(txlineScoreRecord);`}</Code>
         </p>
         <Code>{`node examples/desk_quickstart.mjs
 # Feeding Brazil v Japan — 13335 odds + 989 score frames…
-# 12936 edges -> 27 positions · win-rate 74% · avg CLV 3.05% · net +$10880.83 on $100k`}</Code>
+# 12936 edges -> 27 calls · hit-rate 74% · avg CLV +3.05%`}</Code>
       </section>
 
       {/* API */}
@@ -205,8 +205,9 @@ engine.ingestScores(txlineScoreRecord);`}</Code>
 
         <div className="mt-5 card p-4">
           <p className="label mb-1">endpoint</p>
-          <p className="font-mono text-sm text-amber">GET /api/v1/edges</p>
+          <p className="font-mono text-sm text-amber">GET /api/v1/signals</p>
           <p className="mt-2 text-xs text-faint">
+            Alias: <code className="text-info">/api/v1/edges</code> (identical payload — kept for back-compat).
             Auth: <code className="text-info">Authorization: Bearer &lt;key&gt;</code> or{" "}
             <code className="text-info">X-Api-Key: &lt;key&gt;</code>. Public demo key:{" "}
             <code className="text-amber">ag_demo_2026</code> (production deployments set
@@ -215,11 +216,11 @@ engine.ingestScores(txlineScoreRecord);`}</Code>
         </div>
 
         <p className="label mb-2 mt-6">try it</p>
-        <Code>{`curl -s https://agenthesis-eta.vercel.app/api/v1/edges \\
+        <Code>{`curl -s https://agenthesis-eta.vercel.app/api/v1/signals \\
   -H "Authorization: Bearer ag_demo_2026"
 
 # filter to one fixture, only high-conviction steam, cap per fixture
-curl -s "https://agenthesis-eta.vercel.app/api/v1/edges?kind=steam&conviction=High&limit=10" \\
+curl -s "https://agenthesis-eta.vercel.app/api/v1/signals?kind=steam&conviction=High&limit=10" \\
   -H "X-Api-Key: ag_demo_2026"`}</Code>
 
         <p className="label mb-2 mt-6">query params</p>
@@ -271,11 +272,11 @@ curl -s "https://agenthesis-eta.vercel.app/api/v1/edges?kind=steam&conviction=Hi
           In production the same Edge object is delivered by push instead of poll. Register a URL and
           a persistent worker watching the live TxLINE stream POSTs each new edge to it:
         </p>
-        <Code>{`POST https://your-endpoint.example/agenthesis-edges
+        <Code>{`POST https://your-endpoint.example/agenthesis-signals
 X-Agenthesis-Signature: sha256=<hmac of body with your secret>
 Content-Type: application/json
 
-{ "event": "edge.opened", "edge": { /* identical shape to the poll response */ } }`}</Code>
+{ "event": "signal.opened", "signal": { /* identical shape to the poll response */ } }`}</Code>
         <p className="mt-2 max-w-2xl text-xs text-faint">
           The poll endpoint above is the deterministic, always-available implementation (it replays
           the bundled real captures, since serverless throttles a live engine). The webhook is the
@@ -289,9 +290,9 @@ Content-Type: application/json
         <Link href="/litepaper" className="prompt text-amber hover:text-fg">
           litepaper
         </Link>
-        , or watch agents trade it live on the{" "}
+        , or watch forecasters run it live on the{" "}
         <Link href="/desk" className="text-amber hover:text-fg">
-          desk
+          Signal Desk
         </Link>
         .
       </footer>

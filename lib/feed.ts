@@ -54,6 +54,7 @@ export interface EngineLike {
   stake(id: string, amt: number): { ok: boolean; accepted?: number; remaining?: number; reason?: string };
   openEdges(): Edge[];
   fairProbForMarket(meta: unknown): number | null;
+  markFrameForMarket(meta: unknown): { prob: number; ts: number } | null;
   matchMinute(fid: string | number): number | null;
 }
 

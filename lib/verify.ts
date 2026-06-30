@@ -47,9 +47,21 @@ export interface VerifyTrade {
   odds: number;
   stake: number;
   proofHash: string;
+  exitProb: number | null;
+  exitOdds: number | null;
+  exitTs: number | null;
+  exitProofHash: string | null;
   status: string;
   clvReturn: number;
   pnl: number;
+}
+
+// Recompute CLV from two real fair probs, mirroring markPosition's clamp — so the
+// CSV can cross-check the asserted clv against the published entry+exit prices.
+function clvFrom(direction: string, entryProb: number, exitProb: number): number {
+  const raw =
+    direction === "back" ? (exitProb - entryProb) / entryProb : (entryProb - exitProb) / entryProb;
+  return Math.max(-1, Math.min(2, raw));
 }
 
 // Deterministic per-frame fingerprint (FNV-1a, 8 hex) — uniquely + reproducibly
@@ -78,7 +90,12 @@ const COLUMNS = [
   "fixture_id", "match", "frame_ts_ms", "frame_ts_utc", "bookmaker", "market", "line", "period",
   "in_running", "price_names", "prices", "fair_probs", "frame_hash",
   "traded", "agents_on_frame", "agent", "paper_source", "edge_kind", "bet_side", "bet_direction",
-  "stake_usd", "entry_odds", "entry_fair_prob", "clv_return_pct", "pnl_usd", "status", "trade_proof_hash",
+  "stake_usd", "entry_odds", "entry_fair_prob",
+  // Exit leg — the closing observation the position settled on. exit_ts_ms +
+  // exit_frame_hash point to the real frame elsewhere in this file; clv_recomputed
+  // is CLV re-derived from entry+exit fair probs, to cross-check clv_return_pct.
+  "exit_odds", "exit_fair_prob", "exit_ts_ms", "exit_frame_hash", "exit_proof_hash", "clv_recomputed_pct",
+  "clv_return_pct", "pnl_usd", "status", "trade_proof_hash",
 ];
 
 export interface CsvResult {
@@ -158,6 +175,31 @@ export function buildVerificationCsv(trades: VerifyTrade[]): CsvResult {
     else tradesByFrame.set(bestIdx, [t]);
   }
 
+  // Locate the single real frame whose fair prob for a side best matches a target
+  // (same price-proximity join the entry leg uses) — reused for the exit leg.
+  const findFrame = (
+    fixtureId: string | number,
+    market: string,
+    line: string,
+    sideIndex: number,
+    targetProb: number,
+  ): FrameRow | null => {
+    const candidates = byMarket.get(`${fixtureId}|${market}|${line}`);
+    if (!candidates?.length) return null;
+    let bestIdx = -1;
+    let bestDiff = Infinity;
+    for (const idx of candidates) {
+      const price = frames[idx].prices[sideIndex];
+      if (price == null) continue;
+      const diff = Math.abs(impliedProb(price) - targetProb);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = idx;
+      }
+    }
+    return bestIdx === -1 ? null : frames[bestIdx];
+  };
+
   const lines: string[] = [COLUMNS.join(",")];
   let tradedFrameCount = 0;
   const matches = new Set<string>();
@@ -185,6 +227,20 @@ export function buildVerificationCsv(trades: VerifyTrade[]): CsvResult {
     if (onFrame && onFrame.length) {
       tradedFrameCount++;
       const t = onFrame[0]; // first execution shown inline; count flags the rest
+      // Exit leg: empty until settled; otherwise resolve the exit price to a real
+      // frame and re-derive CLV from the two real fair probs as a cross-check.
+      let exitCells: (string | number)[] = ["", "", "", "", "", ""];
+      if (t.exitProb != null) {
+        const ef = findFrame(t.fixtureId, t.superOddsType, t.marketParameters, t.sideIndex, t.exitProb);
+        exitCells = [
+          (t.exitOdds ?? 1 / t.exitProb).toFixed(3),
+          t.exitProb.toFixed(4),
+          ef ? ef.ts : t.exitTs ?? "",
+          ef ? ef.hash : "",
+          t.exitProofHash ?? "",
+          (clvFrom(t.direction, t.entryProb, t.exitProb) * 100).toFixed(2),
+        ];
+      }
       lines.push(
         [
           ...base,
@@ -198,6 +254,7 @@ export function buildVerificationCsv(trades: VerifyTrade[]): CsvResult {
           t.stake.toFixed(2),
           t.odds.toFixed(3),
           t.entryProb.toFixed(4),
+          ...exitCells,
           (t.clvReturn * 100).toFixed(2),
           t.pnl.toFixed(2),
           t.status,
@@ -205,7 +262,11 @@ export function buildVerificationCsv(trades: VerifyTrade[]): CsvResult {
         ].map(csvCell).join(","),
       );
     } else {
-      lines.push([...base, "0", "0", "", "", "", "", "", "", "", "", "", "", "", ""].map(csvCell).join(","));
+      lines.push(
+        [...base, "0", "0", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+          .map(csvCell)
+          .join(","),
+      );
     }
   }
 

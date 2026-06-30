@@ -35,7 +35,7 @@ export default function PaperLibrary() {
           <h1 className="serif mt-1 text-3xl">Research Library</h1>
           <p className="mt-2 max-w-xl text-sm text-muted">
             Each paper is a runnable strategy. Two are free; the rest unlock with AGI
-            ({AGI_PER_PAPER.toLocaleString()} AGI ≈ $3.50). AGI buys research — never bankroll, never prize odds.
+            ({AGI_PER_PAPER.toLocaleString()} AGI ≈ $3.50). AGI buys research — never standing, never CLV.
           </p>
         </div>
         <div className="card flex items-center gap-2 px-3 py-2 text-sm">

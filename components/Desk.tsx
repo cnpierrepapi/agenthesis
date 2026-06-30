@@ -84,7 +84,7 @@ function tradeToActivity(t: Trade): Activity {
       agentId: t.agentId,
       agentName: t.agent,
       pnl: t.pnl,
-      text: `${t.agent} settled ${t.side} ${t.direction} — CLV ${(t.clvReturn * 100).toFixed(1)}% → ${t.pnl >= 0 ? "+" : ""}$${t.pnl.toFixed(2)}`,
+      text: `${t.agent} graded ${t.side} — CLV ${(t.clvReturn * 100).toFixed(1)}%`,
     };
   }
   return {
@@ -92,7 +92,7 @@ function tradeToActivity(t: Trade): Activity {
     ts: t.ts,
     agentId: t.agentId,
     agentName: t.agent,
-    text: `${t.agent} → ${String(t.direction).toUpperCase()} ${t.side} @ ${Number(t.odds).toFixed(2)} on ${t.match} ($${Number(t.stake).toFixed(0)}, ${t.kind}) · frame ${t.proofHash}`,
+    text: `${t.agent} flagged ${t.side} mispriced @ ${Number(t.odds).toFixed(2)} on ${t.match} (${t.kind}) · frame ${t.proofHash}`,
   };
 }
 
@@ -105,10 +105,6 @@ function sourceLabel(mode?: string): string {
 
 function clock(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour12: false });
-}
-
-function money(n: number): string {
-  return `${n < 0 ? "−" : ""}$${Math.abs(n).toFixed(2)}`;
 }
 
 function glyph(a: Activity): string {
@@ -224,11 +220,26 @@ export default function Desk() {
   const isLive = remoteLive || connected;
 
   const selectedName = selected ? agents.find((a) => a.id === selected)?.name ?? null : null;
-  // When an agent is selected, show only its trades/settles — plus match events,
-  // which are shared context (a goal is why an overreaction trade fired).
+  // When an agent is selected, show only its calls/grades — plus match events,
+  // which are shared context (a goal is why an overreaction call fired).
   const shownFeed = selected ? baseFeed.filter((a) => a.agentId === selected || a.type === "matchEvent") : baseFeed;
-  const realized = agents.reduce((s, a) => s + a.bankroll, 0);
-  const dayPnl = agents.reduce((s, a) => s + a.dayPnl, 0);
+
+  // CLV is the only scorecard. Per-agent average CLV comes from the settled calls
+  // in the current snapshot window; hit/miss counts come from each agent's complete
+  // tally. No dollars are surfaced anywhere on the desk.
+  const rawTrades = remoteLive ? remote!.trades : snap?.trades ?? [];
+  const settled = rawTrades.filter((t) => t.status === "settled");
+  const clvByAgent = new Map<string, { sum: number; n: number }>();
+  for (const t of settled) {
+    const e = clvByAgent.get(t.agentId) ?? { sum: 0, n: 0 };
+    e.sum += t.clvReturn;
+    e.n += 1;
+    clvByAgent.set(t.agentId, e);
+  }
+  const avgClvAll = settled.length ? settled.reduce((s, t) => s + t.clvReturn, 0) / settled.length : 0;
+  const totWins = agents.reduce((s, a) => s + a.wins, 0);
+  const totLosses = agents.reduce((s, a) => s + a.losses, 0);
+  const hitRateAll = totWins + totLosses ? totWins / (totWins + totLosses) : 0;
   const running = agents.filter((a) => a.status === "running").length;
   const open = agents.reduce((s, a) => s + a.openPositions, 0);
 
@@ -236,10 +247,10 @@ export default function Desk() {
     <div className="mx-auto max-w-7xl px-5 py-6">
       {/* aggregate strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Stat label="realized" value={`$${realized.toFixed(2)}`} />
-        <Stat label="day p&l" value={money(dayPnl)} tone={dayPnl >= 0 ? "gain" : "loss"} />
+        <Stat label="avg clv" value={`${(avgClvAll * 100).toFixed(1)}%`} tone={avgClvAll >= 0 ? "gain" : "loss"} />
+        <Stat label="clv hit-rate" value={`${(hitRateAll * 100).toFixed(0)}%`} />
         <Stat label="agents" value={`${running} running`} />
-        <Stat label="open" value={`${open}`} />
+        <Stat label="open calls" value={`${open}`} />
         <div className="card flex items-center justify-between px-4 py-3">
           <span className="label">feed</span>
           <span className="flex items-center gap-2 text-sm">
@@ -307,7 +318,7 @@ export default function Desk() {
                     </button>
                   </>
                 ) : (
-                  "agents trading autonomously — no human in the loop"
+                  "agents forecasting autonomously — no human in the loop"
                 )}
               </p>
             </div>
@@ -345,7 +356,12 @@ export default function Desk() {
         <aside className="order-1 space-y-3 lg:order-2 lg:col-span-4">
           <p className="label px-1">running agents</p>
           {agents.length === 0 && <p className="card px-4 py-3 text-sm text-faint">no agents yet</p>}
-          {agents.map((a) => (
+          {agents.map((a) => {
+            const cs = clvByAgent.get(a.id);
+            const avgClv = cs && cs.n ? cs.sum / cs.n : 0;
+            const settledN = a.wins + a.losses;
+            const hitRate = settledN ? a.wins / settledN : 0;
+            return (
             <div
               key={a.id}
               onClick={() => setSelected((cur) => (cur === a.id ? null : a.id))}
@@ -372,25 +388,22 @@ export default function Desk() {
 
               <div className="mt-3 flex items-end justify-between">
                 <div>
-                  <p className="label">bankroll</p>
-                  <p className="text-lg tabular-nums">${a.bankroll.toFixed(2)}</p>
+                  <p className="label">avg clv</p>
+                  <p className={`text-lg tabular-nums ${avgClv >= 0 ? "gain" : "loss"}`}>
+                    {cs && cs.n ? `${(avgClv * 100).toFixed(1)}%` : "—"}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="label">day p&l</p>
-                  <p className={`tabular-nums ${a.dayPnl >= 0 ? "gain" : "loss"}`}>{money(a.dayPnl)}</p>
+                  <p className="label">hit-rate</p>
+                  <p className="tabular-nums">{settledN ? `${(hitRate * 100).toFixed(0)}%` : "—"}</p>
                 </div>
               </div>
 
               <div className="mt-2 flex items-center justify-between text-xs text-faint">
                 <span>
-                  {a.wins}W / {a.losses}L · {a.bets} bets
+                  {a.wins} hit / {a.losses} miss · {a.bets} calls
                 </span>
-                <span>
-                  open {a.openPositions}
-                  {a.unrealized !== 0 && (
-                    <span className={a.unrealized >= 0 ? "gain" : "loss"}> ({money(a.unrealized)})</span>
-                  )}
-                </span>
+                <span>open {a.openPositions}</span>
               </div>
 
               <div className="mt-3 flex gap-2">
@@ -412,7 +425,8 @@ export default function Desk() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </aside>
       </div>
     </div>
