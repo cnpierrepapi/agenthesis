@@ -1,10 +1,10 @@
 # Agenthesis SDK
 
 Embed the edge-detection engine and the CLV decision core directly in your own
-stack. This is the integration path for a **professional trading desk**: you
+stack. This is the integration path for a **quantitative forecasting desk**: you
 bring your own TxLINE feed and your own strategies; the SDK turns the demargined
-price book into typed, scored edges and grades every decision on closing-line
-value.
+price book into typed, scored signals and grades every call on closing-line
+value — the skill metric, settled from odds alone.
 
 It is the exact code the deployed product runs — pure functions, no I/O, no
 clock reads, deterministic, and unit-tested (`scripts/agent_test.mjs`, 26
@@ -15,7 +15,7 @@ assertions). That is what makes it safe to put next to real execution.
 | Primitive | Function | What it does |
 | --- | --- | --- |
 | **Signal** | `EdgeEngine` | Ingest the demargined book → emit typed, scored edges: `steam` (sharp fair-prob move), `overreaction` (post-event overshoot), `quote` (micro-drift baseline). |
-| **Decision** | `decide(agent, edge, ctx)` | Pure mapping from an edge + your lever set → a sized bet (take / side / direction / stake). Flat or fractional-Kelly. |
+| **Decision** | `decide(agent, edge, ctx)` | Pure mapping from an edge + your lever set → a sized call (take / side / direction / conviction weight). Flat or fractional-Kelly. |
 | **Scoring** | `markPosition(pos, closeProb)` / `scoreCLV(...)` | Closing-line value — the skill metric. Resolves from odds alone, **no match outcome required**. |
 
 You keep ownership of the two things a desk should own: the **feed** (you push
@@ -47,7 +47,7 @@ A complete, runnable end-to-end backtest on real captured TxLINE frames:
 ```bash
 node examples/desk_quickstart.mjs
 # Feeding Brazil v Japan — 13335 odds + 989 score frames…
-# 12936 edges -> 27 positions · win-rate 74% · avg CLV 3.05% · net +$10880.83 on $100k bankroll
+# 12936 edges -> 27 calls · hit-rate 74% · avg CLV +3.05%
 ```
 
 ## API

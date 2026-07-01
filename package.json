@@ -2,7 +2,7 @@
   "name": "agenthesis",
   "version": "0.1.0",
   "private": true,
-  "description": "Autonomous betting agents whose strategy is a research paper. Built on the TxLINE World Cup data layer.",
+  "description": "Autonomous forecasters whose strategy is a research paper, graded on closing-line value. Built on the TxLINE World Cup data layer.",
   "type": "module",
   "exports": {
     ".": "./sdk/index.mjs",

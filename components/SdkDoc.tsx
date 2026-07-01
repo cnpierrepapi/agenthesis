@@ -59,9 +59,9 @@ export default function SdkDoc() {
         <h1 className="serif mt-1 text-4xl text-paper">Agenthesis SDK</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">
           Embed the edge-detection engine and the CLV decision core directly in your own stack.
-          This is the integration path for a professional trading desk: you bring your own TxLINE
+          This is the integration path for a quantitative forecasting desk: you bring your own TxLINE
           feed and your own strategies; the SDK turns the demargined price book into typed, scored
-          edges and grades every decision on closing-line value.
+          signals and grades every call on closing-line value.
         </p>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-faint">
           It is the exact code the deployed product runs — pure functions, no I/O, no clock reads,
